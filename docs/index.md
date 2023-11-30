@@ -1,4 +1,4 @@
-# Lightning Lab
+# Recommendation Lab
 
 ## Overview
 

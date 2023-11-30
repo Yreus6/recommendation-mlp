@@ -3,3 +3,6 @@ torch
 wandb
 optuna
 torch-tb-profiler
+supabase
+python-dotenv
+torchmetrics

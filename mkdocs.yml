@@ -1,7 +1,7 @@
-site_name: Lightning Lab
-site_author: Justin Goheen
-repo_url: https://github.com/JustinGoheen/lightning-lab
-repo_name: Justin Goheen
+site_name: Recommendation Lab
+site_author: Yreus6
+repo_url: https://github.com/Yreus6/recommendation-mlp
+repo_name: Yreus6
 
 theme:
   name: material

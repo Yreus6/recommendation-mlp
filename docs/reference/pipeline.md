@@ -1,10 +1,10 @@
-::: lightninglab.pipeline.LabDataModule
+::: src.recommendationlab.pipeline.LabDataModule
     options:
       heading_level: 2
       show_root_heading: true
 
 
-::: lightninglab.pipeline.Supabase
+::: src.recommendationlab.pipeline.Supabase
     options:
       heading_level: 2
       show_root_heading: true

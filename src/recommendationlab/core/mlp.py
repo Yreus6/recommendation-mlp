@@ -15,20 +15,36 @@
 import pytorch_lightning as pl
 import torch.nn.functional as F  # noqa: F401
 import torchmetrics  # noqa: F401
-from torch import optim  # noqa: F401
+from torch import optim, nn  # noqa: F401
 
 
-class LabModule(pl.LightningModule):
-    """a custom PyTorch Lightning LightningModule"""
+class MLP(pl.LightningModule):
+    """
+    Multilayer Perceptron.
+    """
 
     def __init__(self):
         super().__init__()
+        self.layers = nn.Sequential(
+            nn.Linear(32 * 32 * 3, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Linear(32, 10)
+        )
+        self.loss = nn.CrossEntropyLoss()
 
     def forward(self, x):
-        pass
+        self.layers(x)
 
     def training_step(self, batch):
-        pass
+        x, y = batch
+        x = x.view(x.size(0), -1)
+        y_hat = self.layers(x)
+        loss = self.loss(y_hat, y)
+        self.log('train_loss', loss)
+
+        return loss
 
     def test_step(self, batch, *args):
         pass
@@ -40,4 +56,5 @@ class LabModule(pl.LightningModule):
         pass
 
     def configure_optimizers(self):
-        pass
+        optimizer = optim.Adam(self.parameters(), lr=1e-4)
+        return optimizer
