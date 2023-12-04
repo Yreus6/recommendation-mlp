@@ -14,7 +14,7 @@
 
 import torch
 
-from src.recommendationlab.core.mlp import MLP
+from src.recommendationlab.core.MLP import MLP
 
 
 def test_module_not_abstract():

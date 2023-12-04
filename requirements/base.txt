@@ -6,3 +6,5 @@ torch-tb-profiler
 supabase
 python-dotenv
 torchmetrics
+pandas
+scikit-learn
