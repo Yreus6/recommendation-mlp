@@ -58,24 +58,18 @@ def train(
     gmf_pretrain: Annotated[str, typer.Option(help='GMF pretrained model path')] = '',
     alpha: Annotated[float, typer.Option(help='Alpha parameters used in NeuMF')] = 0.5,
     max_epochs: Annotated[int, typer.Option(help='Max number of epochs to train')] = 100,
-    logger: Annotated[str, typer.Option(help="logger to use. one of (`wandb`, `tensorboard`)")] = 'tensorboard',
 ):
-    data_module = DataModule(data_dir, int(layers[0] / 2), batch_size, num_workers, num_neg)
+    data_module = DataModule(model, data_dir, int(layers[0] / 2), batch_size, num_workers, num_neg)
     data_module.setup(stage='fit')
 
     if model == 'mlp':
         model = MLP(layers, optimizer, lr, top_k)
     elif model == 'gmf':
-        model = GMF(optimizer, lr, top_k)
+        model = GMF(int(layers[0] / 2), optimizer, lr, top_k)
     elif model == 'neumf':
-        model = NeuMF(layers, gmf_pretrain, mlp_pretrain, alpha)
+        model = NeuMF(layers, gmf_pretrain, mlp_pretrain, alpha, top_k)
     else:
         raise NotImplementedError()
-
-    if logger == 'wandb':
-        logger = WandbLogger(name=Config.PROJECTNAME, save_dir=Config.WANDBPATH, project=Config.PROJECTNAME)
-    else:
-        logger = TensorBoardLogger(save_dir=Config.TENSORBOARDLOGGERPATH, name=Config.PROJECTNAME)
 
     trainer = LabTrainer(
         devices='auto',
@@ -85,8 +79,7 @@ def train(
         precision="32-true",
         enable_checkpointing=True,
         max_epochs=max_epochs,
-        callbacks=EarlyStopping(monitor='val-loss', mode='min'),
-        logger=logger,
+        callbacks=[EarlyStopping(monitor='val-loss', mode='min')],
         profiler=PyTorchProfiler(dirpath='logs/torch_profiler'),
     )
     trainer.fit(model, data_module)

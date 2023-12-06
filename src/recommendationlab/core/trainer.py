@@ -25,9 +25,9 @@ class LabTrainer(pl.Trainer):
         if set_seed:
             seed_everything(config.GLOBALSEED, workers=True)
         super().__init__(
-            logger=logger or TensorBoardLogger(config.LOGSPATH, name="tensorboard"),
-            profiler=profiler or PyTorchProfiler(dirpath=config.TORCHPROFILERPATH, filename="profiler"),
-            callbacks=callbacks + [ModelCheckpoint(dirpath=config.CHKPTSPATH, filename="model")],
+            logger=logger or TensorBoardLogger(config.LOGSPATH, name='tensorboard'),
+            profiler=profiler or PyTorchProfiler(dirpath=config.TORCHPROFILERPATH, filename='profiler'),
+            callbacks=callbacks + [ModelCheckpoint(dirpath=config.CHKPTSPATH, filename='model')],
             plugins=plugins,
             **trainer_init_kwargs
         )

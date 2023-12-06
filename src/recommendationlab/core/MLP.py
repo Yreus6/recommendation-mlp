@@ -62,18 +62,17 @@ class MLP(pl.LightningModule):
         self.load_state_dict(state_dict=torch.load(path))
 
     def _common_step(self, batch, stage):
-        """consolidates common code for train, test, and validation steps"""
         x, y = batch
         y_hat = self(x)
         loss = F.binary_cross_entropy(y_hat, y)
 
         if stage == 'training':
-            self.log(f'{stage}-loss', loss)
+            self.log(f'{stage}-loss', loss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
 
             return loss
         if stage in ['val', 'test']:
-            hit_rate = torchmetrics.functional.retrieval_hit_rate(y_hat, y)
-            ndcg = torchmetrics.functional.retrieval_normalized_dcg(y_hat, y)
-            self.log(f'{stage}-HR', hit_rate)
-            self.log(f'{stage}-NDCG', ndcg)
-            self.log(f'{stage}-loss', loss)
+            hit_rate = torchmetrics.functional.retrieval_hit_rate(y_hat, y, top_k=self.top_k)
+            ndcg = torchmetrics.functional.retrieval_normalized_dcg(y_hat, y, top_k=self.top_k)
+            self.log(f'{stage}-HR', hit_rate, prog_bar=True, logger=True, on_step=True, on_epoch=True)
+            self.log(f'{stage}-NDCG', ndcg, prog_bar=True, logger=True, on_step=True, on_epoch=True)
+            self.log(f'{stage}-loss', loss, prog_bar=True, logger=True, on_step=True, on_epoch=True)

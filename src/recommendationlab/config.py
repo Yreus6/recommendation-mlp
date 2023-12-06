@@ -3,8 +3,9 @@ from pathlib import Path
 
 # SET PATHS
 filepath = Path(__file__)
+GLOBALSEED=42
 PROJECTNAME = 'recommendationlab'
-PROJECTPATH = filepath.parents[1]
+PROJECTPATH = filepath.parents[2]
 LOGSPATH = os.path.join(PROJECTPATH, 'logs')
 TORCHPROFILERPATH = os.path.join(LOGSPATH, 'torch_profiler')
 SIMPLEPROFILERPATH = os.path.join(LOGSPATH, 'simple_profiler')
@@ -13,5 +14,4 @@ MODELPATH = os.path.join(PROJECTPATH, 'models', 'production', 'model.onnx')
 PREDSPATH = os.path.join(PROJECTPATH, 'data', 'predictions', 'predictions.pt')
 SPLITSPATH = os.path.join(PROJECTPATH, 'data', 'training_split')
 WANDBPATH = os.path.join(PROJECTPATH, 'logs', 'wandb_logs')
-TENSORBOARDLOGGERPATH = os.path.join(PROJECTPATH, 'logs', 'tensorboard')
 OPTUNAPATH = os.path.join(PROJECTPATH, 'logs', 'optuna')

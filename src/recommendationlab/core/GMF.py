@@ -12,16 +12,19 @@ class GMF(pl.LightningModule):
 
     def __init__(
         self,
+        embed_size: int,
         optimizer: str = 'Adam',
         lr: float = 1e-3,
         top_k: int = 10
     ):
         super().__init__()
         self.optimizer = getattr(optim, optimizer)
+        self.linear = nn.Linear(embed_size, 1)
         self.lr = lr
         self.top_k = top_k
 
     def forward(self, x):
+        x = self.linear(x)
         x = F.sigmoid(x)
 
         return x
@@ -54,12 +57,12 @@ class GMF(pl.LightningModule):
         loss = F.binary_cross_entropy(y_hat, y)
 
         if stage == 'training':
-            self.log(f'{stage}-loss', loss)
+            self.log(f'{stage}-loss', loss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
 
             return loss
         if stage in ['val', 'test']:
-            hit_rate = torchmetrics.functional.retrieval_hit_rate(y_hat, y)
-            ndcg = torchmetrics.functional.retrieval_normalized_dcg(y_hat, y)
-            self.log(f'{stage}-HR', hit_rate)
-            self.log(f'{stage}-NDCG', ndcg)
-            self.log(f'{stage}-loss', loss)
+            hit_rate = torchmetrics.functional.retrieval_hit_rate(y_hat, y, self.top_k)
+            ndcg = torchmetrics.functional.retrieval_normalized_dcg(y_hat, y, self.top_k)
+            self.log(f'{stage}-HR', hit_rate, prog_bar=True, logger=True, on_step=True, on_epoch=True)
+            self.log(f'{stage}-NDCG', ndcg, prog_bar=True, logger=True, on_step=True, on_epoch=True)
+            self.log(f'{stage}-loss', loss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
