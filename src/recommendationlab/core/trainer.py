@@ -33,6 +33,6 @@ class LabTrainer(pl.Trainer):
         )
 
     def persist_predictions(self, predictions_dir: Optional[Union[str, Path]] = config.PREDSPATH) -> None:
-        self.test(ckpt_path="best", datamodule=self.datamodule)
-        predictions = self.predict(self.model, self.datamodule.val_dataloader())
+        self.test(ckpt_path='best', datamodule=self.datamodule)
+        predictions = self.predict(self.model, self.datamodule.test_dataloader())
         torch.save(predictions, predictions_dir)

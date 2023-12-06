@@ -1,10 +1,8 @@
 import os
 from pathlib import Path
-from typing import List
 
 import typer
 from pytorch_lightning.callbacks import EarlyStopping
-from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
 from pytorch_lightning.profilers import PyTorchProfiler
 from typing_extensions import Annotated
 
@@ -13,7 +11,6 @@ from src.recommendationlab.core.GMF import GMF
 from src.recommendationlab.core.MLP import MLP
 from src.recommendationlab.core.NeuMF import NeuMF
 from src.recommendationlab.core.data_module import DataModule
-import src.recommendationlab.config as Config
 
 FILEPATH = Path(__file__)
 PROJECTPATH = FILEPATH.parents[2]
@@ -50,7 +47,7 @@ def train(
     batch_size: Annotated[int, typer.Option(help='Batch size')] = 8,
     num_workers: Annotated[int, typer.Option(help='Number of workers')] = 4,
     num_neg: Annotated[int, typer.Option(help='Number of negative instances to pair with a positive instance.')] = 4,
-    layers: Annotated[List[int], typer.Option(help='MLP layers')] = [20, 10],
+    layers: Annotated[str, typer.Option(help='MLP layers')] = '20,10',
     optimizer: Annotated[str, typer.Option(help='Specify an optimizer')] = 'Adam',
     lr: Annotated[float, typer.Option(help='Learning rate')] = 1e-3,
     top_k: Annotated[int, typer.Option(help='Specify top K for metrics')] = 10,
@@ -59,9 +56,8 @@ def train(
     alpha: Annotated[float, typer.Option(help='Alpha parameters used in NeuMF')] = 0.5,
     max_epochs: Annotated[int, typer.Option(help='Max number of epochs to train')] = 100,
 ):
+    layers = [int(i) for i in layers.split(',')]
     data_module = DataModule(model, data_dir, int(layers[0] / 2), batch_size, num_workers, num_neg)
-    data_module.setup(stage='fit')
-
     if model == 'mlp':
         model = MLP(layers, optimizer, lr, top_k)
     elif model == 'gmf':
@@ -73,7 +69,7 @@ def train(
 
     trainer = LabTrainer(
         devices='auto',
-        accelerator='auto',
+        accelerator='gpu',
         strategy='auto',
         num_nodes=1,
         precision="32-true",
@@ -82,4 +78,10 @@ def train(
         callbacks=[EarlyStopping(monitor='val-loss', mode='min')],
         profiler=PyTorchProfiler(dirpath='logs/torch_profiler'),
     )
+
+    data_module.setup(stage='fit')
     trainer.fit(model, data_module)
+
+    data_module.setup(stage='test')
+    trainer.test(model, data_module)
+

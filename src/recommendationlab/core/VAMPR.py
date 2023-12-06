@@ -16,7 +16,7 @@ class VAMPR(Dataset):
             # negative instances
             for t in range(num_negatives):
                 j = np.random.randint(num_items)
-                while (u, j) in matrix:
+                while (u, j) in matrix.keys():
                     j = np.random.randint(num_items)
                 user_input.append(u)
                 item_input.append(j)

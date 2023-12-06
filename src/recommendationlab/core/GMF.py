@@ -38,11 +38,6 @@ class GMF(pl.LightningModule):
     def validation_step(self, batch, *args):
         self._common_step(batch, 'val')
 
-    def predict_step(self, batch, batch_idx, dataloader_idx=0):
-        x, y = batch
-
-        return self(x)
-
     def configure_optimizers(self):
         optimizer = self.optimizer(self.parameters(), lr=self.lr)
 
