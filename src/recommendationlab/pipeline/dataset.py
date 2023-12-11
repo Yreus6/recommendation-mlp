@@ -1,23 +1,47 @@
-class LabDataset:
-    """
-    Note:
-        see below for a basic example of a custom torch dataset
-    ```python
-    import pandas as pd
-    import torch
-    from torch.utils.data import Dataset
+import numpy as np
+import scipy.sparse as sp
+from torch.utils.data import Dataset
 
 
-    class LabDataset(Dataset):
-        def __init__(self, features_path, labels_path):
-            self.features = pd.read_csv(features_path)
-            self.labels = pd.read_csv(labels_path)
+class VAMPR(Dataset):
+    def __init__(self, matrix: sp.dok_matrix, num_negs: int):
+        num_items = matrix.shape[1]
+        user_input, item_input, labels = [], [], []
 
-        def __len__(self):
-            return len(self.labels)
+        for (u, i) in matrix.keys():
+            # positive instance
+            user_input.append(u)
+            item_input.append(i)
+            labels.append(1.)
+            # negative instances
+            for t in range(num_negs):
+                j = np.random.randint(num_items)
+                while (u, j) in matrix.keys():
+                    j = np.random.randint(num_items)
+                    if j in item_input:
+                        j = np.random.randint(num_items)
+                user_input.append(u)
+                item_input.append(j)
+                labels.append(0.)
 
-        def __getitem__(self, idx):
-            x, y = self.features.iloc[idx], self.labels.iloc[idx]
-            return torch.tensor(x, dtype=torch.float32), torch.tensor(y, dtype=torch.float32)
-    ```
-    """
+        self.user_ids = np.array(user_input)
+        self.item_ids = np.array(item_input)
+        self.labels = np.array(labels)
+
+    def __getitem__(self, index):
+        return self.user_ids[index], self.item_ids[index], self.labels[index]
+
+    def __len__(self):
+        return len(self.user_ids)
+
+
+class VAMPRPredict(Dataset):
+    def __init__(self, users, items):
+        self.users = users
+        self.items = items
+
+    def __getitem__(self, idx):
+        return self.users[idx], self.items[idx]
+
+    def __len__(self):
+        return len(self.users)
