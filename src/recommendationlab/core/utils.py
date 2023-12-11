@@ -12,7 +12,7 @@ def separate_col(df: pd.DataFrame, col: str):
     return df
 
 
-def get_users_items_mat(df: pd.DataFrame):
+def build_user_item_matrix(df: pd.DataFrame):
     # users = df[['USER_ID', 'GENRES_USER', 'INSTRUMENTS', 'COUNTRY', 'AGE']].drop_duplicates()
     # users = users.groupby(['USER_ID'], as_index=False).aggregate({
     #     'GENRES_USER': 'sum',
@@ -27,14 +27,16 @@ def get_users_items_mat(df: pd.DataFrame):
     #     'GENRE_L3': 'mean',
     #     'CREATION_TIMESTAMP': 'mean'
     # }).values
-    interactions = df[['USER_ID', 'ITEM_ID', 'EVENT_VALUE']].drop_duplicates().values
+    df = normalize_label_col(df, 'USER_ID')
+    df = normalize_label_col(df, 'ITEM_ID')
+    interactions = df[['USER_ID', 'ITEM_ID', 'EVENT_VALUE', 'TIMESTAMP']].drop_duplicates().values
 
-    user_ids = interactions[:, 0]
-    item_ids = interactions[:, 1]
+    user_ids = df['USER_ID'].unique()
+    item_ids = df['ITEM_ID'].unique()
     mat = sp.dok_matrix((len(user_ids) + 1, len(item_ids) + 1), dtype=np.float32)
 
     for interaction in interactions:
-        user_id, item_id, event_value = interaction
+        user_id, item_id, event_value, _ = interaction
         if event_value == 1:
             mat[user_id, item_id] = 1
 

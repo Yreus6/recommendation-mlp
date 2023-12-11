@@ -4,6 +4,8 @@ import torch.nn.functional as F  # noqa: F401
 import torchmetrics  # noqa: F401
 from torch import optim, nn  # noqa: F401
 
+from recommendationlab.core.embed import UserEmbedding, ItemEmbedding
+
 
 class GMF(pl.LightningModule):
     """
@@ -13,15 +15,19 @@ class GMF(pl.LightningModule):
     def __init__(
         self,
         embed_size: int,
+        num_users: int,
+        num_items: int,
         optimizer: str = 'Adam',
         lr: float = 1e-3,
-        top_k: int = 10
+        top_k: int = 10,
     ):
         super().__init__()
         self.optimizer = getattr(optim, optimizer)
         self.linear = nn.Linear(embed_size, 1)
         self.lr = lr
         self.top_k = top_k
+        self.user_embedding = UserEmbedding(num_users, embed_size)
+        self.item_embedding = ItemEmbedding(num_items, embed_size)
 
     def forward(self, x):
         x = self.linear(x)
@@ -47,7 +53,10 @@ class GMF(pl.LightningModule):
         self.load_state_dict(state_dict=torch.load(path))
 
     def _common_step(self, batch, stage):
-        x, y = batch
+        user_ids, item_ids, labels = batch
+        user_ids = self.user_embedding(user_ids).flatten(start_dim=1).float()
+        item_ids = self.item_embedding(item_ids).flatten(start_dim=1).float()
+        x, y = user_ids * item_ids, labels.reshape(-1, 1)
         y_hat = self(x)
         loss = F.binary_cross_entropy(y_hat, y)
 
