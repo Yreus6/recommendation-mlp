@@ -65,6 +65,7 @@ def train(
     max_epochs: Annotated[int, typer.Option(help='Max number of epochs to train')] = 100,
     dropout: Annotated[float, typer.Option(help='Dropout value')] = 0.1,
     patience: Annotated[int, typer.Option(help='Early stop patience')] = 5,
+    resume: Annotated[str, typer.Option(help='Resume ckpt training')] = 'last',
     fast_dev_run: Annotated[bool, typer.Option(help='Run dev run')] = False,
 ):
     if model_name == 'mlp':
@@ -131,7 +132,7 @@ def train(
         gradient_clip_val=5.0
     )
 
-    trainer.fit(model, data_module)
+    trainer.fit(model, data_module, ckpt_path=resume)
 
 
 @run_app.command('evaluate')
