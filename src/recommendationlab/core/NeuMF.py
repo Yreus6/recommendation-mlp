@@ -47,8 +47,8 @@ class NeuMF(pl.LightningModule):
         self.predict_layer = nn.Linear(layers[-1] + gmf_factor, 1)
         
         if gmf_pretrain != '' and mlp_pretrain != '':
-            self.gmf_model.load_weights(gmf_pretrain)
-            self.mlp_model.load_weights(mlp_pretrain)
+            self.gmf_model = GMF.load_from_checkpoint(gmf_pretrain)
+            self.mlp_model = MLP.load_from_checkpoint(mlp_pretrain)
             print(f'Loaded pretrained model GMF: {gmf_pretrain}, MLP: {mlp_pretrain}')
 
         self.reset_parameters()

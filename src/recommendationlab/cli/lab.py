@@ -3,9 +3,10 @@ from pathlib import Path
 
 import torch
 import typer
-from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor
+from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
 from typing_extensions import Annotated
 
+from src.recommendationlab import config
 from src.recommendationlab.core import LabTrainer
 from src.recommendationlab.core.GMF import GMF
 from src.recommendationlab.core.MLP import MLP
@@ -100,8 +101,15 @@ def train(
     else:
         accelerator = 'auto'
 
+    best_model_callbacks = ModelCheckpoint(
+        dirpath=os.path.join(config.CHKPTSPATH, model_name),
+        filename='best',
+        monitor='val-HR',
+        mode='max'
+    )
+    best_model_callbacks.FILE_EXTENSION = '.pth'
+
     trainer = LabTrainer(
-        model_name=model_name,
         devices='auto',
         accelerator=accelerator,
         strategy='auto',
@@ -112,7 +120,12 @@ def train(
         fast_dev_run=fast_dev_run,
         callbacks=[
             EarlyStopping(monitor='val-HR', mode='max', patience=patience, verbose=True),
-            LearningRateMonitor(logging_interval='epoch')
+            LearningRateMonitor(logging_interval='epoch'),
+            ModelCheckpoint(
+                dirpath=os.path.join(config.CHKPTSPATH, model_name),
+                filename='model-{epoch:02d}',
+            ),
+            best_model_callbacks
         ],
         gradient_clip_algorithm='norm',
         gradient_clip_val=5.0
@@ -144,7 +157,7 @@ def evaluate(
 
     data_module = DataModule(embed_size)
     data_module.setup('test')
-    trainer = LabTrainer(model_name=model_name)
+    trainer = LabTrainer()
     trainer.test(model, data_module)
 
 
@@ -174,6 +187,6 @@ def predict(
         embed_size = hyp['layers'][0] / 2
     data_module = DataModule(embed_size, predict_data=(user_inputs, item_inputs))
     data_module.setup('predict')
-    trainer = LabTrainer(model_name=model_name)
+    trainer = LabTrainer()
     preds = trainer.predict(model, data_module)
     print('Predictions: {}'.format(preds))
