@@ -1,55 +1,98 @@
-import multiprocessing
 import os
-from pathlib import Path
+import numpy as np
+import pytorch_lightning as L
+import pandas as pd
+from pytorch_lightning.utilities.types import TRAIN_DATALOADERS, EVAL_DATALOADERS
+from torch.utils.data import DataLoader
 
-from pytorch_lightning import LightningDataModule
-from torch.utils.data import DataLoader, Dataset, random_split
-
-from .dataset import LabDataset
-
-filepath = Path(__file__)
-PROJECTPATH = os.getcwd()
-NUMWORKERS = int(multiprocessing.cpu_count() // 2)
+from src.recommendationlab import config
+from src.recommendationlab.pipeline.dataset import VAMPR, VAMPRPredict
+from src.recommendationlab.core.embed import UserItemToId
+from src.recommendationlab.core.utils import build_user_item_matrix
 
 
-class LabDataModule(LightningDataModule):
+class DataModule(L.LightningDataModule):
     def __init__(
         self,
-        dataset: Dataset = LabDataset,
-        data_dir: str = "data",
-        split: bool = True,
-        train_size: float = 0.8,
-        num_workers: int = NUMWORKERS,
-        transforms=None,
+        embed_size: int,
+        batch_size: int = 8,
+        num_workers: int = 8,
+        num_negs: int = 4,
+        num_negs_val: int = 100,
+        num_negs_test: int = 100,
+        predict_data: tuple[list[str], list[int]] = None
     ):
         super().__init__()
-        self.data_dir = os.path.join(PROJECTPATH, data_dir, "cache")
-        self.dataset = dataset
-        self.split = split
-        self.train_size = train_size
+        self.embed_size = embed_size
+        self.batch_size = batch_size
         self.num_workers = num_workers
-        self.transforms = transforms
+        self.num_negs = num_negs
+        self.num_negs_val = num_negs_val
+        self.num_negs_test = num_negs_test
+        self.predict_data = predict_data
 
-    def prepare_data(self):
-        self.dataset(self.data_dir, download=True)
+    def setup(self, stage: str) -> None:
+        self.train = pd.read_csv(os.path.join(config.SPLITSPATH, 'train.csv'))
 
-    def setup(self, stage=None):
-        if stage == "fit" or stage is None:
-            full_dataset = self.dataset(self.data_dir, train=True, transform=self.transforms)
-            train_size = int(len(full_dataset) * self.train_size)
-            test_size = len(full_dataset) - train_size
-            self.train_data, self.val_data = random_split(full_dataset, lengths=[train_size, test_size])
-        if stage == "test" or stage is None:
-            self.test_data = self.dataset(self.data_dir, train=False, transform=self.transforms)
+        self.num_users = self.train['USER_ID'].nunique()
+        self.num_items = self.train['ITEM_ID'].nunique()
 
-    # def teardown(self):
-    #     pass
+        user_ids = self.train['USER_ID'].unique()
+        item_ids = self.train['ITEM_ID'].unique()
+        self.user_item = UserItemToId(user_ids, item_ids)
 
-    def train_dataloader(self):
-        return DataLoader(self.train_data, num_workers=self.num_workers)
+        if stage == 'fit':
+            self.val = pd.read_csv(os.path.join(config.SPLITSPATH, 'val.csv'))
+        if stage == 'test':
+            self.test = pd.read_csv(os.path.join(config.SPLITSPATH, 'test.csv'))
+        if stage == 'predict':
+            user_inputs, item_inputs = self.predict_data
+            user_inputs = np.array([self.user_item.user2id[x] for x in user_inputs])
+            item_inputs = np.array([self.user_item.item2id[x] for x in item_inputs])
+            self.predict = VAMPRPredict(user_inputs, item_inputs)
 
-    def test_dataloader(self):
-        return DataLoader(self.test_data, num_workers=self.num_workers)
+    def train_dataloader(self) -> TRAIN_DATALOADERS:
+        train_mat = build_user_item_matrix(self.train, self.user_item)
+        dataset = VAMPR(train_mat, self.num_negs)
 
-    def val_dataloader(self):
-        return DataLoader(self.val_data, num_workers=self.num_workers)
+        return DataLoader(
+            dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            persistent_workers=True,
+            shuffle=True
+        )
+
+    def val_dataloader(self) -> EVAL_DATALOADERS:
+        val_mat = build_user_item_matrix(self.val, self.user_item)
+        dataset = VAMPR(val_mat, self.num_negs_val)
+
+        return DataLoader(
+            dataset,
+            batch_size=self.num_negs_val + 1,
+            num_workers=self.num_workers,
+            persistent_workers=True,
+            shuffle=False
+        )
+
+    def test_dataloader(self) -> EVAL_DATALOADERS:
+        test_mat = build_user_item_matrix(self.test, self.user_item)
+        dataset = VAMPR(test_mat, self.num_negs_test)
+
+        return DataLoader(
+            dataset,
+            batch_size=self.num_negs_test + 1,
+            num_workers=self.num_workers,
+            persistent_workers=True,
+            shuffle=False
+        )
+
+    def predict_dataloader(self) -> EVAL_DATALOADERS:
+        return DataLoader(
+            self.predict,
+            batch_size=1,
+            num_workers=self.num_workers,
+            persistent_workers=True,
+            shuffle=False
+        )

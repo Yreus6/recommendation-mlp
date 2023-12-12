@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -14,6 +15,7 @@ from src.recommendationlab import config
 class LabTrainer(pl.Trainer):
     def __init__(
         self,
+        model_name: str = '',
         logger: Optional[Logger] = None,
         profiler: Optional[Profiler] = None,
         callbacks: Optional[List] = [],
@@ -27,7 +29,9 @@ class LabTrainer(pl.Trainer):
         super().__init__(
             logger=logger or TensorBoardLogger(config.LOGSPATH, name='tensorboard'),
             profiler=profiler or PyTorchProfiler(dirpath=config.TORCHPROFILERPATH, filename='profiler'),
-            callbacks=callbacks + [ModelCheckpoint(dirpath=config.CHKPTSPATH, filename='model')],
+            callbacks=callbacks + [
+                ModelCheckpoint(dirpath=os.path.join(config.CHKPTSPATH, model_name), filename='model')
+            ],
             plugins=plugins,
             **trainer_init_kwargs
         )

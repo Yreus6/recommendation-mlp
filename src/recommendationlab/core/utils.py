@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
-from sklearn.preprocessing import LabelEncoder, MinMaxScaler
+
+from src.recommendationlab.core.embed import UserItemToId
 
 
 def separate_col(df: pd.DataFrame, col: str):
@@ -12,7 +13,7 @@ def separate_col(df: pd.DataFrame, col: str):
     return df
 
 
-def get_users_items_mat(df: pd.DataFrame):
+def build_user_item_matrix(df: pd.DataFrame, user_item: UserItemToId):
     # users = df[['USER_ID', 'GENRES_USER', 'INSTRUMENTS', 'COUNTRY', 'AGE']].drop_duplicates()
     # users = users.groupby(['USER_ID'], as_index=False).aggregate({
     #     'GENRES_USER': 'sum',
@@ -27,30 +28,13 @@ def get_users_items_mat(df: pd.DataFrame):
     #     'GENRE_L3': 'mean',
     #     'CREATION_TIMESTAMP': 'mean'
     # }).values
-    interactions = df[['USER_ID', 'ITEM_ID', 'EVENT_VALUE']].drop_duplicates().values
+    interactions = df[['USER_ID', 'ITEM_ID', 'EVENT_VALUE', 'TIMESTAMP']].drop_duplicates().values
 
-    user_ids = interactions[:, 0]
-    item_ids = interactions[:, 1]
-    mat = sp.dok_matrix((len(user_ids) + 1, len(item_ids) + 1), dtype=np.float32)
+    mat = sp.dok_matrix((len(user_item.user2id.keys()), len(user_item.item2id.keys())), dtype=np.float32)
 
     for interaction in interactions:
-        user_id, item_id, event_value = interaction
+        user_id, item_id, event_value, _ = interaction
         if event_value == 1:
-            mat[user_id, item_id] = 1
+            mat[user_item.user2id[user_id], user_item.item2id[item_id]] = 1
 
     return mat
-
-
-def normalize_label_col(df: pd.DataFrame, col: str):
-    le = LabelEncoder()
-    le.fit(df[col].unique())
-    df[col] = le.transform(df[col].values)
-
-    return df
-
-
-def normalize_min_max(df: pd.DataFrame, col: str):
-    scaler = MinMaxScaler()
-    df[col] = scaler.fit(df[col].unique().reshape(-1, 1))
-
-    return df

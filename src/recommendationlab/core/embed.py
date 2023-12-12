@@ -1,19 +1,40 @@
+from collections import OrderedDict
+
+import numpy as np
 from torch import nn
 
 
-class UserEmbedding(nn.Module):
-    def __init__(self, num_users: int, emb_size: int):
-        super(UserEmbedding, self).__init__()
-        self.user_embedding = nn.Embedding(num_users, emb_size)
+class FeaturesEmbedding(nn.Module):
+    def __init__(self, field_sizes: list, embed_size: int):
+        super().__init__()
+        self.embedding = nn.Embedding(sum(field_sizes), embed_size)
+        self.offsets = np.array((0, *np.cumsum(field_sizes)[:-1]), dtype=np.int64)
 
-    def forward(self, users):
-        return self.user_embedding(users)
+    def forward(self, x):
+        x = x + x.new_tensor(self.offsets).unsqueeze(0)
+
+        return self.embedding(x)
 
 
-class ItemEmbedding(nn.Module):
-    def __init__(self, num_items, emb_size: int):
-        super(ItemEmbedding, self).__init__()
-        self.item_embedding = nn.Embedding(num_items, emb_size)
+class UserItemToId:
+    def __init__(self, user_data, item_data):
+        self.user_data = user_data
+        self.item_data = item_data
+        self._init_data()
+        self.id2user = {self.user2id[k]: k for k in self.user2id}
+        self.id2item = {self.item2id[k]: k for k in self.item2id}
 
-    def forward(self, items):
-        return self.item_embedding(items)
+    def _init_data(self):
+        self.user2id, self.item2id = OrderedDict(), OrderedDict()
+        for user in self.user_data:
+            self.user2id[user] = len(self.user2id)
+        for item in self.item_data:
+            self.item2id[item] = len(self.item2id)
+
+    @property
+    def users(self):
+        return self.id2user.keys()
+
+    @property
+    def items(self):
+        return self.id2item.keys()
