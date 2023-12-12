@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 
-from src.recommendationlab.core.embed import UserItemToId
+from src.recommendationlab.components.embed import UserItemToId
 
 
 def separate_col(df: pd.DataFrame, col: str):
