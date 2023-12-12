@@ -7,8 +7,8 @@ from torch.utils.data import DataLoader
 
 from src.recommendationlab import config
 from src.recommendationlab.pipeline.dataset import VAMPR, VAMPRPredict
-from src.recommendationlab.core.embed import UserItemToId
-from src.recommendationlab.core.utils import build_user_item_matrix
+from src.recommendationlab.components.embed import UserItemToId
+from src.recommendationlab.components.utils import build_user_item_matrix
 
 
 class DataModule(L.LightningDataModule):
