@@ -5,7 +5,6 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F  # noqa: F401
 import torchmetrics  # noqa: F401
-from pytorch_lightning.cli import ReduceLROnPlateau
 from torch import optim, nn  # noqa: F401
 
 

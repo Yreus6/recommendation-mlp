@@ -3,7 +3,7 @@ from pathlib import Path
 
 import torch
 import typer
-from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
+from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor
 from typing_extensions import Annotated
 
 from src.recommendationlab.core import LabTrainer
@@ -49,7 +49,7 @@ def preprocess(data_dir: Annotated[str, typer.Option(help='Data directory')]):
 
 @run_app.command('train')
 def train(
-    model: Annotated[str, typer.Option(help='Model to use. One of (`mlp`, `gmf`, `neumf`)')],
+    model_name: Annotated[str, typer.Option(help='Model to use. One of (`mlp`, `gmf`, `neumf`)')],
     batch_size: Annotated[int, typer.Option(help='Batch size')] = 8,
     num_workers: Annotated[int, typer.Option(help='Number of workers')] = 8,
     num_neg: Annotated[int, typer.Option(help='Number of negative instances to pair with a positive instance.')] = 4,
@@ -65,16 +65,16 @@ def train(
     dropout: Annotated[float, typer.Option(help='Dropout value')] = 0.1,
     fast_dev_run: Annotated[bool, typer.Option(help='Run dev run')] = False,
 ):
-    if model == 'mlp':
+    if model_name == 'mlp':
         layers = [int(i) for i in layers.split(',')]
         data_module = DataModule(int(layers[0] / 2), batch_size, num_workers, num_neg)
         data_module.setup('fit')
         model = MLP(data_module.num_users, data_module.num_items, layers, optimizer, lr, top_k, dropout)
-    elif model == 'gmf':
+    elif model_name == 'gmf':
         data_module = DataModule(gmf_factor, batch_size, num_workers, num_neg)
         data_module.setup('fit')
         model = GMF(data_module.num_users, data_module.num_items, gmf_factor, optimizer, lr, top_k)
-    elif model == 'neumf':
+    elif model_name == 'neumf':
         layers = [int(i) for i in layers.split(',')]
         data_module = DataModule(int(layers[0] / 2), batch_size, num_workers, num_neg)
         data_module.setup('fit')
@@ -100,7 +100,7 @@ def train(
         accelerator = 'auto'
 
     trainer = LabTrainer(
-        model_name=model,
+        model_name=model_name,
         devices='auto',
         accelerator=accelerator,
         strategy='auto',
@@ -122,15 +122,15 @@ def train(
 
 @run_app.command('evaluate')
 def evaluate(
-    model: Annotated[str, typer.Option(help='Model to use. One of (`mlp`, `gmf`, `neumf`)')],
+    model_name: Annotated[str, typer.Option(help='Model to use. One of (`mlp`, `gmf`, `neumf`)')],
     model_path: Annotated[str, typer.Option(help='Model path to use')]
 ):
     hparams = torch.load(model_path, map_location=lambda storage, loc: storage)
-    if model == 'gmf':
+    if model_name == 'gmf':
         model = GMF.load_from_checkpoint(model_path)
-    elif model == 'mlp':
+    elif model_name == 'mlp':
         model = MLP.load_from_checkpoint(model_path)
-    elif model == 'neumf':
+    elif model_name == 'neumf':
         model = NeuMF.load_from_checkpoint(model_path)
 
     hyp = hparams['hyper_parameters']
@@ -141,23 +141,23 @@ def evaluate(
 
     data_module = DataModule(embed_size)
     data_module.setup('test')
-    trainer = LabTrainer()
+    trainer = LabTrainer(model_name=model)
     trainer.test(model, data_module)
 
 
 @run_app.command('predict')
 def predict(
-    model: Annotated[str, typer.Option(help='Model')],
+    model_name: Annotated[str, typer.Option(help='Model')],
     model_path: Annotated[str, typer.Option(help='Model path to use')],
     user_inputs: Annotated[str, typer.Option(help='User inputs')],
     item_inputs: Annotated[str, typer.Option(help='Item inputs')],
 ):
     hparams = torch.load(model_path, map_location=lambda storage, loc: storage)
-    if model == 'gmf':
+    if model_name == 'gmf':
         model = GMF.load_from_checkpoint(model_path)
-    elif model == 'mlp':
+    elif model_name == 'mlp':
         model = MLP.load_from_checkpoint(model_path)
-    elif model == 'neumf':
+    elif model_name == 'neumf':
         model = NeuMF.load_from_checkpoint(model_path)
 
     user_inputs = [i for i in user_inputs.split(',')]
@@ -169,6 +169,6 @@ def predict(
         embed_size = hyp['layers'][0] / 2
     data_module = DataModule(embed_size, predict_data=(user_inputs, item_inputs))
     data_module.setup('predict')
-    trainer = LabTrainer()
+    trainer = LabTrainer(model_name=model)
     preds = trainer.predict(model, data_module)
     print('Predictions: {}'.format(preds))
