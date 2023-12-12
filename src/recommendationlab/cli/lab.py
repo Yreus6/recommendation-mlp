@@ -63,6 +63,7 @@ def train(
     alpha: Annotated[float, typer.Option(help='Alpha parameters used in NeuMF')] = 0.5,
     max_epochs: Annotated[int, typer.Option(help='Max number of epochs to train')] = 100,
     dropout: Annotated[float, typer.Option(help='Dropout value')] = 0.1,
+    patience: Annotated[int, typer.Option(help='Early stop patience')] = 5,
     fast_dev_run: Annotated[bool, typer.Option(help='Run dev run')] = False,
 ):
     if model_name == 'mlp':
@@ -110,7 +111,7 @@ def train(
         max_epochs=max_epochs,
         fast_dev_run=fast_dev_run,
         callbacks=[
-            EarlyStopping(monitor='val-HR', mode='max', patience=5, verbose=True),
+            EarlyStopping(monitor='val-HR', mode='max', patience=patience, verbose=True),
             LearningRateMonitor(logging_interval='epoch')
         ],
         gradient_clip_algorithm='norm',
@@ -132,6 +133,8 @@ def evaluate(
         model = MLP.load_from_checkpoint(model_path)
     elif model_name == 'neumf':
         model = NeuMF.load_from_checkpoint(model_path)
+    else:
+        raise NotImplementedError()
 
     hyp = hparams['hyper_parameters']
     if hyp['embed_size']:
@@ -141,7 +144,7 @@ def evaluate(
 
     data_module = DataModule(embed_size)
     data_module.setup('test')
-    trainer = LabTrainer(model_name=model)
+    trainer = LabTrainer(model_name=model_name)
     trainer.test(model, data_module)
 
 
@@ -159,6 +162,8 @@ def predict(
         model = MLP.load_from_checkpoint(model_path)
     elif model_name == 'neumf':
         model = NeuMF.load_from_checkpoint(model_path)
+    else:
+        raise NotImplementedError()
 
     user_inputs = [i for i in user_inputs.split(',')]
     item_inputs = [int(i) for i in item_inputs.split(',')]
@@ -169,6 +174,6 @@ def predict(
         embed_size = hyp['layers'][0] / 2
     data_module = DataModule(embed_size, predict_data=(user_inputs, item_inputs))
     data_module.setup('predict')
-    trainer = LabTrainer(model_name=model)
+    trainer = LabTrainer(model_name=model_name)
     preds = trainer.predict(model, data_module)
     print('Predictions: {}'.format(preds))
