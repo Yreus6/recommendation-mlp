@@ -27,8 +27,6 @@ class NeuMF(pl.LightningModule):
         dropout: float = 0.5
     ):
         super().__init__()
-        self.gmf_model = GMF(int(layers[0] / 2), num_users, num_items, top_k=top_k)
-        self.mlp_model = MLP(num_users, num_items, layers, top_k=top_k)
         self.alpha = alpha
         self.optimizer = getattr(optim, optimizer)
         self.lr = lr
