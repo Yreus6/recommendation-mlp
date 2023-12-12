@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Optional, Union
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning import seed_everything
-from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import Logger, TensorBoardLogger
 from pytorch_lightning.profilers import Profiler, PyTorchProfiler
 
@@ -15,7 +14,6 @@ from src.recommendationlab import config
 class LabTrainer(pl.Trainer):
     def __init__(
         self,
-        model_name: str = '',
         logger: Optional[Logger] = None,
         profiler: Optional[Profiler] = None,
         callbacks: Optional[List] = [],
@@ -29,9 +27,7 @@ class LabTrainer(pl.Trainer):
         super().__init__(
             logger=logger or TensorBoardLogger(config.LOGSPATH, name='tensorboard'),
             profiler=profiler or PyTorchProfiler(dirpath=config.TORCHPROFILERPATH, filename='profiler'),
-            callbacks=callbacks + [
-                ModelCheckpoint(dirpath=os.path.join(config.CHKPTSPATH, model_name), filename='model')
-            ],
+            callbacks=callbacks,
             plugins=plugins,
             **trainer_init_kwargs
         )

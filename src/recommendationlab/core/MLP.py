@@ -82,9 +82,6 @@ class MLP(pl.LightningModule):
             'monitor': 'val-HR'
         }
 
-    def load_weights(self, path: str):
-        self.load_state_dict(state_dict=torch.load(path))
-
     def _common_step(self, batch, stage):
         user_ids, item_ids, labels = batch
         user_ids = self.user_embedding(user_ids).float()
