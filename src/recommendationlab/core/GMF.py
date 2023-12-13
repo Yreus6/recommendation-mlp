@@ -1,9 +1,9 @@
-import numpy as np
 import pytorch_lightning as pl
-import torch
 import torch.nn.functional as F  # noqa: F401
 import torchmetrics  # noqa: F401
 from torch import optim, nn  # noqa: F401
+
+from recommendationlab.components.utils import calculate_metrics
 
 
 class GMF(pl.LightningModule):
@@ -81,12 +81,6 @@ class GMF(pl.LightningModule):
         if stage == 'training':
             return loss
         if stage in ['val', 'test']:
-            rank = torch.sum((y_hat >= y_hat[0]).float()).item()
-            if rank <= self.top_k:
-                hit_rate = 1.0
-                ndcg = 1 / np.log2(rank + 1)
-            else:
-                hit_rate = 0.0
-                ndcg = 0.0
+            hit_rate, ndcg = calculate_metrics(y_hat, self.top_k)
             self.log(f'{stage}-HR', hit_rate, prog_bar=True, logger=True, on_step=True, on_epoch=True)
             self.log(f'{stage}-NDCG', ndcg, prog_bar=True, logger=True, on_step=True, on_epoch=True)
