@@ -78,7 +78,15 @@ class NeuMF(pl.LightningModule):
             nn.init.normal_(self.mlp_user_embedding.weight, std=0.01)
             nn.init.normal_(self.mlp_item_embedding.weight, std=0.01)
     
-    def forward(self, x_gmf, x_mlp):
+    def forward(self, x):
+        users, items = x
+        gmf_users = self.gmf_user_embedding(users).float()
+        gmf_items = self.gmf_item_embedding(items).float()
+        mlp_users = self.mlp_user_embedding(users).float()
+        mlp_items = self.mlp_item_embedding(items).float()
+        x_gmf = gmf_users * gmf_items
+        x_mlp = torch.concat([mlp_users, mlp_items], dim=-1)
+        
         for i, layer in enumerate(self.layers):
             x_mlp = self.dropout(x_mlp)
             x_mlp = layer(x_mlp)
@@ -102,16 +110,7 @@ class NeuMF(pl.LightningModule):
         self._common_step(batch, 'val')
     
     def predict_step(self, batch, *args):
-        user_ids, item_ids = batch
-        gmf_user_ids = self.gmf_user_embedding(user_ids).float()
-        gmf_item_ids = self.gmf_item_embedding(item_ids).float()
-        mlp_user_ids = self.mlp_user_embedding(user_ids).float()
-        mlp_item_ids = self.mlp_item_embedding(item_ids).float()
-        gmf_vector = gmf_user_ids * gmf_item_ids
-        mlp_vector = torch.concat([mlp_user_ids, mlp_item_ids], dim=-1)
-        
-        x_gmf, x_mlp = gmf_vector, mlp_vector
-        y_hat = self(x_gmf, x_mlp).reshape(-1)
+        y_hat = self(batch).reshape(-1)
         
         return y_hat
     
@@ -126,16 +125,10 @@ class NeuMF(pl.LightningModule):
         }
     
     def _common_step(self, batch, stage):
-        user_ids, item_ids, labels = batch
-        gmf_user_ids = self.gmf_user_embedding(user_ids).float()
-        gmf_item_ids = self.gmf_item_embedding(item_ids).float()
-        mlp_user_ids = self.mlp_user_embedding(user_ids).float()
-        mlp_item_ids = self.mlp_item_embedding(item_ids).float()
-        gmf_vector = gmf_user_ids * gmf_item_ids
-        mlp_vector = torch.concat([mlp_user_ids, mlp_item_ids], dim=-1)
-        
-        x_gmf, x_mlp, y = gmf_vector, mlp_vector, labels.float()
-        y_hat = self(x_gmf, x_mlp).reshape(-1)
+        users, items, labels = batch
+        x = (users, items)
+        y = labels.float()
+        y_hat = self(x).reshape(-1)
         
         loss = F.binary_cross_entropy(y_hat, y)
         self.log(f'{stage}-loss', loss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
