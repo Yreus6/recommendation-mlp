@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-import torch
+import pandas as pd
 import typer
 from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
 from typing_extensions import Annotated
@@ -21,7 +21,8 @@ PKGPATH = FILEPATH.parents[1]
 app = typer.Typer()
 docs_app = typer.Typer()
 run_app = typer.Typer()
-app.add_typer(docs_app, name="docs")
+app.add_typer(docs_app, name='docs')
+app.add_typer(run_app, name='run')
 
 
 @app.callback()
@@ -48,6 +49,12 @@ def preprocess(data_dir: Annotated[str, typer.Option(help='Data directory')]):
     preprocessor.process_data()
 
 
+@run_app.command('build-vocab')
+def build_vocab(data_dir: Annotated[str, typer.Option(help='Data directory')]):
+    preprocessor = Preprocessor(data_dir)
+    preprocessor.build_vocab()
+
+
 @run_app.command('train')
 def train(
     model_name: Annotated[str, typer.Option(help='Model to use. One of (`mlp`, `gmf`, `neumf`)')],
@@ -70,16 +77,16 @@ def train(
 ):
     if model_name == 'mlp':
         layers = [int(i) for i in layers.split(',')]
-        data_module = DataModule(int(layers[0] / 2), batch_size, num_workers, num_neg)
+        data_module = DataModule(batch_size, num_workers, num_neg)
         data_module.setup('fit')
         model = MLP(data_module.num_users, data_module.num_items, layers, optimizer, lr, top_k, dropout)
     elif model_name == 'gmf':
-        data_module = DataModule(gmf_factor, batch_size, num_workers, num_neg)
+        data_module = DataModule(batch_size, num_workers, num_neg)
         data_module.setup('fit')
         model = GMF(data_module.num_users, data_module.num_items, gmf_factor, optimizer, lr, top_k)
     elif model_name == 'neumf':
         layers = [int(i) for i in layers.split(',')]
-        data_module = DataModule(int(layers[0] / 2), batch_size, num_workers, num_neg)
+        data_module = DataModule(batch_size, num_workers, num_neg)
         data_module.setup('fit')
         model = NeuMF(
             data_module.num_users,
@@ -140,7 +147,6 @@ def evaluate(
     model_name: Annotated[str, typer.Option(help='Model to use. One of (`mlp`, `gmf`, `neumf`)')],
     model_path: Annotated[str, typer.Option(help='Model path to use')]
 ):
-    hparams = torch.load(model_path, map_location=lambda storage, loc: storage)
     if model_name == 'gmf':
         model = GMF.load_from_checkpoint(model_path)
     elif model_name == 'mlp':
@@ -150,15 +156,7 @@ def evaluate(
     else:
         raise NotImplementedError()
 
-    hyp = hparams['hyper_parameters']
-    if 'embed_size' in hyp:
-        embed_size = hyp['embed_size']
-    elif 'layers' in hyp:
-        embed_size = hyp['layers'][0] / 2
-    else:
-        raise ValueError('Error load embed size')
-
-    data_module = DataModule(embed_size)
+    data_module = DataModule()
     data_module.setup('test')
     trainer = LabTrainer()
     trainer.test(model, data_module)
@@ -168,10 +166,9 @@ def evaluate(
 def predict(
     model_name: Annotated[str, typer.Option(help='Model')],
     model_path: Annotated[str, typer.Option(help='Model path to use')],
-    user_inputs: Annotated[str, typer.Option(help='User inputs')],
-    item_inputs: Annotated[str, typer.Option(help='Item inputs')],
+    users_file: Annotated[str, typer.Option(help='Users csv file')],
+    items_file: Annotated[str, typer.Option(help='Items csv file')],
 ):
-    hparams = torch.load(model_path, map_location=lambda storage, loc: storage)
     if model_name == 'gmf':
         model = GMF.load_from_checkpoint(model_path)
     elif model_name == 'mlp':
@@ -181,18 +178,14 @@ def predict(
     else:
         raise NotImplementedError()
 
-    hyp = hparams['hyper_parameters']
-    if 'embed_size' in hyp:
-        embed_size = hyp['embed_size']
-    elif 'layers' in hyp:
-        embed_size = hyp['layers'][0] / 2
-    else:
-        raise ValueError('Error load embed size')
-    
-    user_inputs = [i for i in user_inputs.split(',')]
-    item_inputs = [int(i) for i in item_inputs.split(',')]
-    data_module = DataModule(embed_size, predict_data=(user_inputs, item_inputs))
+    users = pd.read_csv(users_file)
+    items = pd.read_csv(items_file)
+
+    data_module = DataModule(predict_data=(users, items))
     data_module.setup('predict')
     trainer = LabTrainer()
     preds = trainer.predict(model, data_module)
-    print('Predictions: {}'.format(preds))
+
+    predictions = pd.DataFrame(preds, columns=['prediction'])
+    result = pd.concat([users, items, predictions], ignore_index=True)
+    result.to_csv(config.PREDSPATH, 'predictions.csv', index=False)
