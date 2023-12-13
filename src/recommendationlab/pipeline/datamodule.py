@@ -30,18 +30,24 @@ class DataModule(L.LightningDataModule):
         self.num_negs_val = num_negs_val
         self.num_negs_test = num_negs_test
         self.predict_data = predict_data
-
-    def setup(self, stage: str) -> None:
-        self.train = pd.read_csv(os.path.join(config.SPLITSPATH, 'train.csv'))
-
-        self.num_users = self.train['USER_ID'].nunique()
-        self.num_items = self.train['ITEM_ID'].nunique()
-
-        user_ids = self.train['USER_ID'].unique()
-        item_ids = self.train['ITEM_ID'].unique()
+        
+        self._init_user_item()
+    
+    def _init_user_item(self):
+        user_path = os.path.join(config.SPLITSPATH, 'users_dataset.csv')
+        item_path = os.path.join(config.SPLITSPATH, 'items_dataset.csv')
+        user_df = pd.read_csv(user_path)
+        item_df = pd.read_csv(item_path)
+        
+        user_ids = user_df['USER_ID'].unique()
+        item_ids = item_df['ITEM_ID'].unique()
+        self.num_users = len(user_ids)
+        self.num_items = len(item_ids)
         self.user_item = UserItemToId(user_ids, item_ids)
-
+    
+    def setup(self, stage: str) -> None:
         if stage == 'fit':
+            self.train = pd.read_csv(os.path.join(config.SPLITSPATH, 'train.csv'))
             self.val = pd.read_csv(os.path.join(config.SPLITSPATH, 'val.csv'))
         if stage == 'test':
             self.test = pd.read_csv(os.path.join(config.SPLITSPATH, 'test.csv'))
@@ -50,11 +56,11 @@ class DataModule(L.LightningDataModule):
             user_inputs = np.array([self.user_item.user2id[x] for x in user_inputs])
             item_inputs = np.array([self.user_item.item2id[x] for x in item_inputs])
             self.predict = VAMPRPredict(user_inputs, item_inputs)
-
+    
     def train_dataloader(self) -> TRAIN_DATALOADERS:
         train_mat = build_user_item_matrix(self.train, self.user_item)
         dataset = VAMPR(train_mat, self.num_negs)
-
+        
         return DataLoader(
             dataset,
             batch_size=self.batch_size,
@@ -63,11 +69,11 @@ class DataModule(L.LightningDataModule):
             persistent_workers=True,
             shuffle=True
         )
-
+    
     def val_dataloader(self) -> EVAL_DATALOADERS:
         val_mat = build_user_item_matrix(self.val, self.user_item)
         dataset = VAMPR(val_mat, self.num_negs_val)
-
+        
         return DataLoader(
             dataset,
             batch_size=self.num_negs_val + 1,
@@ -75,11 +81,11 @@ class DataModule(L.LightningDataModule):
             persistent_workers=True,
             shuffle=False
         )
-
+    
     def test_dataloader(self) -> EVAL_DATALOADERS:
         test_mat = build_user_item_matrix(self.test, self.user_item)
         dataset = VAMPR(test_mat, self.num_negs_test)
-
+        
         return DataLoader(
             dataset,
             batch_size=self.num_negs_test + 1,
@@ -87,7 +93,7 @@ class DataModule(L.LightningDataModule):
             persistent_workers=True,
             shuffle=False
         )
-
+    
     def predict_dataloader(self) -> EVAL_DATALOADERS:
         return DataLoader(
             self.predict,

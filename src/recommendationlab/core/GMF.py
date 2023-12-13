@@ -3,7 +3,7 @@ import torch.nn.functional as F  # noqa: F401
 import torchmetrics  # noqa: F401
 from torch import optim, nn  # noqa: F401
 
-from recommendationlab.components.utils import calculate_metrics
+from src.recommendationlab.components.utils import calculate_metrics
 
 
 class GMF(pl.LightningModule):
