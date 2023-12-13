@@ -3,7 +3,7 @@ import torch.nn.functional as F  # noqa: F401
 import torchmetrics  # noqa: F401
 from torch import optim, nn  # noqa: F401
 
-from recommendationlab.components.utils import calculate_metrics
+from src.recommendationlab.components.utils import calculate_metrics
 
 
 class GMF(pl.LightningModule):
@@ -35,6 +35,11 @@ class GMF(pl.LightningModule):
         nn.init.normal_(self.item_embedding.weight, std=0.01)
 
     def forward(self, x):
+        users, items = x
+        users = self.user_embedding(users).float()
+        items = self.item_embedding(items).float()
+        x = users * items
+        
         x = self.predict_layer(x)
         x = F.sigmoid(x)
 
@@ -50,11 +55,7 @@ class GMF(pl.LightningModule):
         self._common_step(batch, 'val')
 
     def predict_step(self, batch, *args):
-        user_ids, item_ids = batch
-        user_ids = self.user_embedding(user_ids).float()
-        item_ids = self.item_embedding(item_ids).float()
-        x = user_ids * item_ids
-        y_hat = self(x).reshape(-1)
+        y_hat = self(batch).reshape(-1)
 
         return y_hat
 
@@ -69,10 +70,9 @@ class GMF(pl.LightningModule):
         }
 
     def _common_step(self, batch, stage):
-        user_ids, item_ids, labels = batch
-        user_ids = self.user_embedding(user_ids).float()
-        item_ids = self.item_embedding(item_ids).float()
-        x, y = user_ids * item_ids, labels.float()
+        users, items, labels = batch
+        x = (users, items)
+        y = labels.float()
         y_hat = self(x).reshape(-1)
 
         loss = F.binary_cross_entropy(y_hat, y)
