@@ -151,10 +151,12 @@ def evaluate(
         raise NotImplementedError()
 
     hyp = hparams['hyper_parameters']
-    if hyp['embed_size']:
+    if 'embed_size' in hyp:
         embed_size = hyp['embed_size']
-    else:
+    elif 'layers' in hyp:
         embed_size = hyp['layers'][0] / 2
+    else:
+        raise ValueError('Error load embed size')
 
     data_module = DataModule(embed_size)
     data_module.setup('test')
@@ -179,13 +181,16 @@ def predict(
     else:
         raise NotImplementedError()
 
+    hyp = hparams['hyper_parameters']
+    if 'embed_size' in hyp:
+        embed_size = hyp['embed_size']
+    elif 'layers' in hyp:
+        embed_size = hyp['layers'][0] / 2
+    else:
+        raise ValueError('Error load embed size')
+    
     user_inputs = [i for i in user_inputs.split(',')]
     item_inputs = [int(i) for i in item_inputs.split(',')]
-    hyp = hparams['hyper_parameters']
-    if hyp['embed_size']:
-        embed_size = hyp['embed_size']
-    else:
-        embed_size = hyp['layers'][0] / 2
     data_module = DataModule(embed_size, predict_data=(user_inputs, item_inputs))
     data_module.setup('predict')
     trainer = LabTrainer()
