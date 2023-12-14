@@ -29,58 +29,80 @@ class DataModule(L.LightningDataModule):
         self.predict_data = predict_data
     
     def setup(self, stage: str) -> None:
-        user_path = os.path.join(config.SPLITSPATH, 'users_dataset.csv')
-        item_path = os.path.join(config.SPLITSPATH, 'items_dataset.csv')
-        
-        user_df = pd.read_csv(user_path)
-        item_df = pd.read_csv(item_path)
-        item_df.drop(['CONTENT_OWNER'], axis=1, inplace=True)
-        
-        user_df.fillna({
-            'GENRES': 'UNK',
-            'INSTRUMENTS': 'UNK',
-            'COUNTRY': 'UNK',
-            'AGE': 0
-        }, inplace=True)
-        item_df.fillna({
-            'GENRES': 'UNK',
-            'GENRE_L2': 'UNK',
-            'GENRE_L3': 'UNK',
-            'CREATION_TIMESTAMP': 0
-        }, inplace=True)
-        
-        user_ids = user_df['USER_ID'].unique()
-        item_ids = item_df['ITEM_ID'].unique()
-        
-        self.user_id_vocab = Vocab(user_ids, False)
-        self.item_id_vocab = Vocab(item_ids, False)
-        
-        self.users = users_normalize(user_df, self.user_id_vocab)
-        self.items = items_normalize(item_df, self.item_id_vocab)
-        
-        self.users_fields = [
-            len(user_ids),
-            user_df['GENRES'].nunique(),
-            user_df['INSTRUMENTS'].nunique(),
-            user_df['COUNTRY'].nunique()
-        ]
-        self.items_fields = [
-            len(item_ids),
-            item_df['GENRES'].nunique(),
-            item_df['GENRE_L2'].nunique(),
-            item_df['GENRE_L3'].nunique()
-        ]
-        
-        if stage == 'fit':
-            self.train = pd.read_csv(os.path.join(config.SPLITSPATH, 'train.csv'))
-            self.val = pd.read_csv(os.path.join(config.SPLITSPATH, 'val.csv'))
-        if stage == 'test':
-            self.test = pd.read_csv(os.path.join(config.SPLITSPATH, 'test.csv'))
+        if stage != 'predict':
+            user_path = os.path.join(config.SPLITSPATH, 'users_dataset.csv')
+            item_path = os.path.join(config.SPLITSPATH, 'items_dataset.csv')
+
+            user_df = pd.read_csv(user_path)
+            item_df = pd.read_csv(item_path)
+            item_df.drop(['CONTENT_OWNER'], axis=1, inplace=True)
+
+            user_df.fillna({
+                'GENRES': 'UNK',
+                'INSTRUMENTS': 'UNK',
+                'COUNTRY': 'UNK',
+                'AGE': 0
+            }, inplace=True)
+            item_df.fillna({
+                'GENRES': 'UNK',
+                'GENRE_L2': 'UNK',
+                'GENRE_L3': 'UNK',
+                'CREATION_TIMESTAMP': 0
+            }, inplace=True)
+
+            user_ids = user_df['USER_ID'].unique()
+            item_ids = item_df['ITEM_ID'].unique()
+
+            self.user_id_vocab = Vocab(user_ids, False)
+            self.item_id_vocab = Vocab(item_ids, False)
+
+            self.users = users_normalize(user_df, self.user_id_vocab)
+            self.items = items_normalize(item_df, self.item_id_vocab)
+
+            self.users_fields = [
+                user_df['GENRES'].nunique(),
+                user_df['INSTRUMENTS'].nunique(),
+                user_df['COUNTRY'].nunique()
+            ]
+            self.items_fields = [
+                item_df['GENRES'].nunique(),
+                item_df['GENRE_L2'].nunique(),
+                item_df['GENRE_L3'].nunique()
+            ]
+
+            if stage == 'fit':
+                self.train = pd.read_csv(os.path.join(config.SPLITSPATH, 'train.csv'))
+                self.val = pd.read_csv(os.path.join(config.SPLITSPATH, 'val.csv'))
+            if stage == 'test':
+                self.test = pd.read_csv(os.path.join(config.SPLITSPATH, 'test.csv'))
+
         if stage == 'predict':
             user_df, item_df = self.predict_data
-            users = list(users_normalize(user_df, self.user_id_vocab).values())
-            items = list(items_normalize(item_df, self.item_id_vocab).values())
-            self.predict = VAMPRPredict(users, items)
+
+            user_df.fillna({
+                'GENRES': 'UNK',
+                'INSTRUMENTS': 'UNK',
+                'COUNTRY': 'UNK',
+                'AGE': 0
+            }, inplace=True)
+            item_df.fillna({
+                'GENRES': 'UNK',
+                'GENRE_L2': 'UNK',
+                'GENRE_L3': 'UNK',
+                'CREATION_TIMESTAMP': 0
+            }, inplace=True)
+
+            user_ids = user_df['USER_ID'].unique()
+            item_ids = item_df['ITEM_ID'].unique()
+
+            self.user_id_vocab = Vocab(user_ids, False)
+            self.item_id_vocab = Vocab(item_ids, False)
+
+            self.user_ids = user_df['USER_ID'].apply(lambda x: self.user_id_vocab.item2id[x]).values
+            self.item_ids = item_df['ITEM_ID'].apply(lambda x: self.item_id_vocab.item2id[x]).values
+
+            self.users = users_normalize(user_df, self.user_id_vocab)
+            self.items = items_normalize(item_df, self.item_id_vocab)
     
     def train_dataloader(self) -> TRAIN_DATALOADERS:
         train_mat = build_user_item_matrix(self.train, self.user_id_vocab, self.item_id_vocab)
@@ -120,9 +142,11 @@ class DataModule(L.LightningDataModule):
         )
     
     def predict_dataloader(self) -> EVAL_DATALOADERS:
+        dataset = VAMPRPredict(self.users, self.items, self.user_ids, self.item_ids)
+
         return DataLoader(
-            self.predict,
-            batch_size=1,
+            dataset,
+            batch_size=self.batch_size,
             num_workers=self.num_workers,
             persistent_workers=True,
             shuffle=False

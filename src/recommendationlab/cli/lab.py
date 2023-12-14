@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import typer
 from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
@@ -15,8 +16,8 @@ from src.recommendationlab.pipeline.datamodule import DataModule
 from src.recommendationlab.pipeline.preprocess import Preprocessor
 
 FILEPATH = Path(__file__)
-PROJECTPATH = FILEPATH.parents[2]
-PKGPATH = FILEPATH.parents[1]
+PROJECTPATH = FILEPATH.parents[3]
+PKGPATH = FILEPATH.parents[2]
 
 app = typer.Typer()
 docs_app = typer.Typer()
@@ -61,10 +62,11 @@ def train(
     batch_size: Annotated[int, typer.Option(help='Batch size')] = 8,
     num_workers: Annotated[int, typer.Option(help='Number of workers')] = 8,
     num_neg: Annotated[int, typer.Option(help='Number of negative instances to pair with a positive instance.')] = 4,
-    gmf_user_embed_sizes: Annotated[str, typer.Option(help='GMF user embed size')] = '20,10,10,10',
-    gmf_item_embed_sizes: Annotated[str, typer.Option(help='GMF item embed size')] = '20,10,10,10',
-    mlp_user_embed_sizes: Annotated[str, typer.Option(help='MLP user embed size')] = '20,10,10,10',
-    mlp_item_embed_sizes: Annotated[str, typer.Option(help='MLP item embed size')] = '20,10,10,10',
+    num_neg_val: Annotated[int, typer.Option(help='Val negative instances')] = 100,
+    gmf_user_embed_sizes: Annotated[str, typer.Option(help='GMF user embed size')] = '20,10,10',
+    gmf_item_embed_sizes: Annotated[str, typer.Option(help='GMF item embed size')] = '20,10,10',
+    mlp_user_embed_sizes: Annotated[str, typer.Option(help='MLP user embed size')] = '20,10,10',
+    mlp_item_embed_sizes: Annotated[str, typer.Option(help='MLP item embed size')] = '20,10,10',
     layer_size: Annotated[int, typer.Option(help='MLP layer size')] = 3,
     optimizer: Annotated[str, typer.Option(help='Specify an optimizer')] = 'Adam',
     lr: Annotated[float, typer.Option(help='Learning rate')] = 1e-3,
@@ -83,7 +85,7 @@ def train(
     if model_name == 'mlp':
         mlp_user_embed_sizes = [int(i) for i in mlp_user_embed_sizes.split(',')]
         mlp_item_embed_sizes = [int(i) for i in mlp_item_embed_sizes.split(',')]
-        data_module = DataModule(batch_size, num_workers, num_neg)
+        data_module = DataModule(batch_size, num_workers, num_neg, num_neg_val)
         data_module.setup('fit')
         model = MLP(
             data_module.users_fields,
@@ -99,7 +101,7 @@ def train(
     elif model_name == 'gmf':
         gmf_user_embed_sizes = [int(i) for i in gmf_user_embed_sizes.split(',')]
         gmf_item_embed_sizes = [int(i) for i in gmf_item_embed_sizes.split(',')]
-        data_module = DataModule(batch_size, num_workers, num_neg)
+        data_module = DataModule(batch_size, num_workers, num_neg, num_neg_val)
         data_module.setup('fit')
         model = GMF(
             data_module.users_fields,
@@ -115,7 +117,7 @@ def train(
         gmf_item_embed_sizes = [int(i) for i in gmf_item_embed_sizes.split(',')]
         mlp_user_embed_sizes = [int(i) for i in mlp_user_embed_sizes.split(',')]
         mlp_item_embed_sizes = [int(i) for i in mlp_item_embed_sizes.split(',')]
-        data_module = DataModule(batch_size, num_workers, num_neg)
+        data_module = DataModule(batch_size, num_workers, num_neg, num_neg_val)
         data_module.setup('fit')
         model = NeuMF(
             data_module.users_fields,
@@ -177,7 +179,9 @@ def train(
 @run_app.command('evaluate')
 def evaluate(
     model_name: Annotated[str, typer.Option(help='Model to use. One of (`mlp`, `gmf`, `neumf`)')],
-    model_path: Annotated[str, typer.Option(help='Model path to use')]
+    model_path: Annotated[str, typer.Option(help='Model path to use')],
+    num_workers: Annotated[int, typer.Option(help='Number of workers')] = 8,
+    num_neg_test: Annotated[int, typer.Option(help='Test negative instances')] = 100,
 ):
     if model_name == 'gmf':
         model = GMF.load_from_checkpoint(model_path)
@@ -188,7 +192,7 @@ def evaluate(
     else:
         raise NotImplementedError()
     
-    data_module = DataModule()
+    data_module = DataModule(num_workers=num_workers, num_negs_test=num_neg_test)
     data_module.setup('test')
     trainer = LabTrainer()
     trainer.test(model, data_module)
@@ -200,6 +204,8 @@ def predict(
     model_path: Annotated[str, typer.Option(help='Model path to use')],
     users_file: Annotated[str, typer.Option(help='Users csv file')],
     items_file: Annotated[str, typer.Option(help='Items csv file')],
+    batch_size: Annotated[int, typer.Option(help='Batch size')] = 8,
+    num_workers: Annotated[int, typer.Option(help='Number of workers')] = 8,
 ):
     if model_name == 'gmf':
         model = GMF.load_from_checkpoint(model_path)
@@ -212,13 +218,22 @@ def predict(
     
     users = pd.read_csv(users_file)
     items = pd.read_csv(items_file)
-    assert len(users) == len(items), f'Users and items must have the same length'
+    users_items = users.merge(items, how='cross')
+    users = users_items[['USER_ID', 'GENRES_x', 'INSTRUMENTS', 'COUNTRY', 'AGE']].rename(
+        columns={'GENRES_x': 'GENRES'}
+    )
+    users_copy = users.copy()
+    items = users_items[['ITEM_ID', 'GENRES_y', 'GENRE_L2', 'GENRE_L3', 'CREATION_TIMESTAMP']].rename(
+        columns={'GENRES_y': 'GENRES'}
+    )
+    items_copy = items.copy()
     
-    data_module = DataModule(predict_data=(users, items))
+    data_module = DataModule(batch_size, num_workers, predict_data=(users, items))
     data_module.setup('predict')
     trainer = LabTrainer()
-    preds = trainer.predict(model, data_module)
+    preds = trainer.predict(model, data_module.predict_dataloader())
+    preds = np.concatenate([p.cpu().detach().numpy() for p in preds]).ravel().tolist()
     
-    predictions = pd.DataFrame(preds, columns=['prediction'])
-    result = pd.concat([users, items, predictions], ignore_index=True)
-    result.to_csv(config.PREDSPATH, 'predictions.csv', index=False)
+    predictions = pd.DataFrame(preds, columns=['PREDICTION'])
+    result = pd.concat([users_copy, items_copy, predictions], axis=1)
+    result.to_csv(os.path.join(PROJECTPATH, 'data', 'predictions', 'predictions.csv'), index=False)

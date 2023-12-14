@@ -154,4 +154,5 @@ logs/wandb_logs/wandb
 data/cache/LabDataset
 data/training_split/*_dataset.csv
 data/training_split/*_vocab.json
+data/predictions/*.csv
 wandb/
