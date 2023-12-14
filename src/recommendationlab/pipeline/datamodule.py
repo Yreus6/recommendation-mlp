@@ -59,13 +59,11 @@ class DataModule(L.LightningDataModule):
         self.items = items_normalize(item_df, self.item_id_vocab)
         
         self.users_fields = [
-            len(user_ids),
             user_df['GENRES'].nunique(),
             user_df['INSTRUMENTS'].nunique(),
             user_df['COUNTRY'].nunique()
         ]
         self.items_fields = [
-            len(item_ids),
             item_df['GENRES'].nunique(),
             item_df['GENRE_L2'].nunique(),
             item_df['GENRE_L3'].nunique()

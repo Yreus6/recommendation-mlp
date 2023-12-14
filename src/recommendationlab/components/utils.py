@@ -16,9 +16,8 @@ def users_normalize(user_df: pd.DataFrame, user_id_vocab: Vocab):
     user_df['GENRES'] = user_df['GENRES'].apply(lambda x: genres_vocab[x])
     user_df['INSTRUMENTS'] = user_df['INSTRUMENTS'].apply(lambda x: instruments_vocab[x])
     user_df['COUNTRY'] = user_df['COUNTRY'].apply(lambda x: countries_vocab[x])
-    users = user_df.values
-    
-    return {u[0]: u for u in users}
+
+    return user_df.set_index('USER_ID').T.to_dict('list')
 
 
 def items_normalize(item_df: pd.DataFrame, item_id_vocab: Vocab):
@@ -31,9 +30,8 @@ def items_normalize(item_df: pd.DataFrame, item_id_vocab: Vocab):
     item_df['GENRES'] = item_df['GENRES'].apply(lambda x: genres_vocab[x])
     item_df['GENRE_L2'] = item_df['GENRE_L2'].apply(lambda x: genre_l2_vocab[x])
     item_df['GENRE_L3'] = item_df['GENRE_L3'].apply(lambda x: genre_l3_vocab[x])
-    items = item_df.values
-    
-    return {i[0]: i for i in items}
+
+    return item_df.set_index('ITEM_ID').T.to_dict('list')
 
 
 def build_user_item_matrix(interactions: pd.DataFrame, user_id_vocab: Vocab, item_id_vocab: Vocab):
