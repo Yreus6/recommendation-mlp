@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from src.recommendationlab import config
 from src.recommendationlab.components.vocab import Vocab
 from src.recommendationlab.pipeline.dataset import VAMPR, VAMPRPredict
-from src.recommendationlab.components.utils import build_user_item_matrix
+from src.recommendationlab.components.utils import build_user_item_matrix, users_normalize, items_normalize
 
 
 class DataModule(L.LightningDataModule):
@@ -27,28 +27,65 @@ class DataModule(L.LightningDataModule):
         self.num_negs_val = num_negs_val
         self.num_negs_test = num_negs_test
         self.predict_data = predict_data
-
+    
     def setup(self, stage: str) -> None:
-        self.train = pd.read_csv(os.path.join(config.SPLITSPATH, 'train.csv'))
-        user_ids = self.train['USER_ID'].unique()
-        item_ids = self.train['ITEM_ID'].unique()
-        self.num_users = len(user_ids)
-        self.num_items = len(item_ids)
-        self.user_ids = Vocab(user_ids)
-        self.item_ids = Vocab(item_ids)
-
+        user_path = os.path.join(config.SPLITSPATH, 'users_dataset.csv')
+        item_path = os.path.join(config.SPLITSPATH, 'items_dataset.csv')
+        
+        user_df = pd.read_csv(user_path)
+        item_df = pd.read_csv(item_path)
+        item_df.drop(['CONTENT_OWNER'], axis=1, inplace=True)
+        
+        user_df.fillna({
+            'GENRES': 'UNK',
+            'INSTRUMENTS': 'UNK',
+            'COUNTRY': 'UNK',
+            'AGE': 0
+        }, inplace=True)
+        item_df.fillna({
+            'GENRES': 'UNK',
+            'GENRE_L2': 'UNK',
+            'GENRE_L3': 'UNK',
+            'CREATION_TIMESTAMP': 0
+        }, inplace=True)
+        
+        user_ids = user_df['USER_ID'].unique()
+        item_ids = item_df['ITEM_ID'].unique()
+        
+        self.user_id_vocab = Vocab(user_ids, False)
+        self.item_id_vocab = Vocab(item_ids, False)
+        
+        self.users = users_normalize(user_df, self.user_id_vocab)
+        self.items = items_normalize(item_df, self.item_id_vocab)
+        
+        self.users_fields = [
+            len(user_ids),
+            user_df['GENRES'].nunique(),
+            user_df['INSTRUMENTS'].nunique(),
+            user_df['COUNTRY'].nunique()
+        ]
+        self.items_fields = [
+            len(item_ids),
+            item_df['GENRES'].nunique(),
+            item_df['GENRE_L2'].nunique(),
+            item_df['GENRE_L3'].nunique()
+        ]
+        
         if stage == 'fit':
+            self.train = pd.read_csv(os.path.join(config.SPLITSPATH, 'train.csv'))
             self.val = pd.read_csv(os.path.join(config.SPLITSPATH, 'val.csv'))
         if stage == 'test':
             self.test = pd.read_csv(os.path.join(config.SPLITSPATH, 'test.csv'))
         if stage == 'predict':
-            users, items = self.predict_data
-            self.predict = VAMPRPredict(users.values, items.values)
-
+            user_df, item_df = self.predict_data
+            users = list(users_normalize(user_df, self.user_id_vocab).values())
+            items = list(items_normalize(item_df, self.item_id_vocab).values())
+            self.predict = VAMPRPredict(users, items)
+    
     def train_dataloader(self) -> TRAIN_DATALOADERS:
-        train_mat = build_user_item_matrix(self.train, self.user_ids, self.item_ids)
-        dataset = VAMPR(train_mat, self.num_negs)
-
+        train_mat = build_user_item_matrix(self.train, self.user_id_vocab, self.item_id_vocab)
+        dataset = VAMPR(self.users, self.items, train_mat, self.num_negs)
+        
         return DataLoader(
             dataset,
             batch_size=self.batch_size,
@@ -57,11 +94,11 @@ class DataModule(L.LightningDataModule):
             persistent_workers=True,
             shuffle=True
         )
-
+    
     def val_dataloader(self) -> EVAL_DATALOADERS:
-        val_mat = build_user_item_matrix(self.val, self.user_ids, self.item_ids)
-        dataset = VAMPR(val_mat, self.num_negs_val)
-
+        val_mat = build_user_item_matrix(self.val, self.user_id_vocab, self.item_id_vocab)
+        dataset = VAMPR(self.users, self.items, val_mat, self.num_negs_val)
+        
         return DataLoader(
             dataset,
             batch_size=self.num_negs_val + 1,
@@ -69,11 +106,11 @@ class DataModule(L.LightningDataModule):
             persistent_workers=True,
             shuffle=False
         )
-
+    
     def test_dataloader(self) -> EVAL_DATALOADERS:
-        test_mat = build_user_item_matrix(self.test, self.user_ids, self.item_ids)
-        dataset = VAMPR(test_mat, self.num_negs_test)
-
+        test_mat = build_user_item_matrix(self.test, self.user_id_vocab, self.item_id_vocab)
+        dataset = VAMPR(self.users, self.items, test_mat, self.num_negs_test)
+        
         return DataLoader(
             dataset,
             batch_size=self.num_negs_test + 1,
@@ -81,7 +118,7 @@ class DataModule(L.LightningDataModule):
             persistent_workers=True,
             shuffle=False
         )
-
+    
     def predict_dataloader(self) -> EVAL_DATALOADERS:
         return DataLoader(
             self.predict,

@@ -6,6 +6,7 @@ import torch.nn.functional as F  # noqa: F401
 import torchmetrics  # noqa: F401
 from torch import optim, nn  # noqa: F401
 
+from src.recommendationlab.components.embed import FeaturesEmbedding
 from src.recommendationlab.components.utils import calculate_metrics
 from src.recommendationlab.core.GMF import GMF
 from src.recommendationlab.core.MLP import MLP
@@ -14,10 +15,13 @@ from src.recommendationlab.core.MLP import MLP
 class NeuMF(pl.LightningModule):
     def __init__(
         self,
-        num_users: int,
-        num_items: int,
-        layers: Optional[List[int]] = [20, 10],
-        gmf_factor: int = 10,
+        users_fields: List[int],
+        items_fields: List[int],
+        user_gmf_embed_sizes: List[int],
+        item_gmf_embed_sizes: List[int],
+        user_mlp_embed_sizes: List[int],
+        item_mlp_embed_sizes: List[int],
+        layer_size: int = 3,
         gmf_pretrain: str = '',
         mlp_pretrain: str = '',
         alpha: float = 0.5,
@@ -27,24 +31,27 @@ class NeuMF(pl.LightningModule):
         dropout: float = 0.5
     ):
         super().__init__()
+        assert sum(user_gmf_embed_sizes) == sum(item_gmf_embed_sizes)
+        gmf_embed_size = sum(user_gmf_embed_sizes) + 1
+        mlp_embed_size = sum(user_mlp_embed_sizes) + sum(item_mlp_embed_sizes) + 2
         self.alpha = alpha
         self.optimizer = getattr(optim, optimizer)
         self.lr = lr
         self.top_k = top_k
         self.dropout = nn.Dropout(dropout)
-        self.gmf_user_embedding = nn.Embedding(num_users, gmf_factor)
-        self.gmf_item_embedding = nn.Embedding(num_items, gmf_factor)
-        self.mlp_user_embedding = nn.Embedding(num_users, int(layers[0] / 2))
-        self.mlp_item_embedding = nn.Embedding(num_items, int(layers[0] / 2))
         self.gmf_pretrain = gmf_pretrain
         self.mlp_pretrain = mlp_pretrain
         
-        num_layers = len(layers)
         self.layers = nn.ModuleList()
-        for i in range(num_layers - 1):
-            linear = nn.Linear(layers[i], layers[i + 1])
+        for i in range(layer_size - 1):
+            linear = nn.Linear(mlp_embed_size // (2 ** i), mlp_embed_size // (2 ** (i + 1)))
             self.layers.append(linear)
-        self.predict_layer = nn.Linear(layers[-1] + gmf_factor, 1)
+        self.predict_layer = nn.Linear((gmf_embed_size + mlp_embed_size) // (2 ** (layer_size - 1)), 1)
+        
+        self.gmf_user_embedding = FeaturesEmbedding(users_fields, user_gmf_embed_sizes)
+        self.gmf_item_embedding = FeaturesEmbedding(items_fields, item_gmf_embed_sizes)
+        self.mlp_user_embedding = FeaturesEmbedding(users_fields, user_mlp_embed_sizes)
+        self.mlp_item_embedding = FeaturesEmbedding(items_fields, item_mlp_embed_sizes)
         
         if gmf_pretrain != '' and mlp_pretrain != '':
             self.gmf_model = GMF.load_from_checkpoint(gmf_pretrain)
@@ -56,10 +63,15 @@ class NeuMF(pl.LightningModule):
     
     def reset_parameters(self):
         if self.gmf_pretrain != '' and self.mlp_pretrain != '':
-            self.gmf_user_embedding.weight.copy_(self.gmf_model.user_embedding.weight)
-            self.gmf_item_embedding.weight.copy_(self.gmf_model.item_embedding.weight)
-            self.mlp_user_embedding.weight.copy_(self.mlp_model.user_embedding.weight)
-            self.mlp_item_embedding.weight.copy_(self.mlp_model.item_embedding.weight)
+            for (e1, e2) in zip(self.gmf_user_embedding.embeddings, self.gmf_model.user_embedding.embeddings):
+                e1.weight.copy_(e2.weight)
+            for (e1, e2) in zip(self.gmf_item_embedding.embeddings, self.gmf_model.item_embedding.embeddings):
+                e1.weight.copy_(e2.weight)
+            for (e1, e2) in zip(self.mlp_user_embedding.embeddings, self.mlp_model.user_embedding.embeddings):
+                e1.weight.copy_(e2.weight)
+            for (e1, e2) in zip(self.mlp_item_embedding.embeddings, self.mlp_model.item_embedding.embeddings):
+                e1.weight.copy_(e2.weight)
+       
             for (m1, m2) in zip(self.layers, self.mlp_model.layers):
                 if isinstance(m1, nn.Linear) and isinstance(m2, nn.Linear):
                     m1.weight.copy_(m2.weight)
@@ -73,17 +85,33 @@ class NeuMF(pl.LightningModule):
             self.predict_layer.weight.copy_(0.5 * predict_weight)
             self.predict_layer.bias.copy_(0.5 * predict_bias)
         else:
-            nn.init.normal_(self.gmf_user_embedding.weight, std=0.01)
-            nn.init.normal_(self.gmf_item_embedding.weight, std=0.01)
-            nn.init.normal_(self.mlp_user_embedding.weight, std=0.01)
-            nn.init.normal_(self.mlp_item_embedding.weight, std=0.01)
+            for embedding in self.gmf_user_embedding.embeddings:
+                nn.init.normal_(embedding.weight, std=0.01)
+            for embedding in self.gmf_item_embedding.embeddings:
+                nn.init.normal_(embedding.weight, std=0.01)
+            for embedding in self.mlp_user_embedding.embeddings:
+                nn.init.normal_(embedding.weight, std=0.01)
+            for embedding in self.mlp_item_embedding.embeddings:
+                nn.init.normal_(embedding.weight, std=0.01)
     
     def forward(self, x):
         users, items = x
-        gmf_users = self.gmf_user_embedding(users).float()
-        gmf_items = self.gmf_item_embedding(items).float()
-        mlp_users = self.mlp_user_embedding(users).float()
-        mlp_items = self.mlp_item_embedding(items).float()
+        gmf_users = torch.concat([
+            self.gmf_user_embedding(users[:, :-1]).float(),
+            users[:, -1:].float() / 100
+        ], dim=-1)
+        gmf_items = torch.concat([
+            self.gmf_item_embedding(items[:, :-1]).float(),
+            items[:, -1:].float() / 5000000000
+        ], dim=-1)
+        mlp_users = torch.concat([
+            self.mlp_user_embedding(users[:, :-1]).float(),
+            users[:, -1:].float() / 100
+        ], dim=-1)
+        mlp_items = torch.concat([
+            self.mlp_item_embedding(items[:, :-1]).float(),
+            items[:, -1:].float() / 5000000000
+        ], dim=-1)
         x_gmf = gmf_users * gmf_items
         x_mlp = torch.concat([mlp_users, mlp_items], dim=-1)
         

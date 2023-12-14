@@ -77,16 +77,8 @@ class Preprocessor:
             'GENRES': 'UNK',
             'GENRE_L2': 'UNK',
             'GENRE_L3': 'UNK',
-            'CONTENT_OWNER': 'UNK',
             'CREATION_TIMESTAMP': 0
         }, inplace=True)
-
-        user_df['GENRES'] = user_df['GENRES'].str.split('|')
-        user_df = user_df.explode('GENRES')
-        user_df = user_df.reset_index(drop=True)
-        user_df['INSTRUMENTS'] = user_df['INSTRUMENTS'].str.split('|')
-        user_df = user_df.explode('INSTRUMENTS')
-        user_df = user_df.reset_index(drop=True)
 
         user_genres = user_df['GENRES'].unique()
         user_instruments = user_df['INSTRUMENTS'].unique()
@@ -101,10 +93,6 @@ class Preprocessor:
         }
         with open(os.path.join(config.SPLITSPATH, 'user_vocab.json'), 'w') as f_user:
             json.dump(user_vocab, f_user)
-
-        item_df['GENRE_L2'] = item_df['GENRE_L2'].str.split('|')
-        item_df = item_df.explode('GENRE_L2')
-        item_df = item_df.reset_index(drop=True)
 
         item_genres = item_df['GENRES'].unique()
         item_genre_l2 = item_df['GENRE_L2'].unique()

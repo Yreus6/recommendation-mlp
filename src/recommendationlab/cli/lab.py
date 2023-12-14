@@ -33,7 +33,7 @@ def callback() -> None:
 @docs_app.command('build')
 def build_docs() -> None:
     import shutil
-
+    
     os.system('mkdocs build')
     shutil.copyfile(src='README.md', dst='docs/index.md')
 
@@ -61,8 +61,11 @@ def train(
     batch_size: Annotated[int, typer.Option(help='Batch size')] = 8,
     num_workers: Annotated[int, typer.Option(help='Number of workers')] = 8,
     num_neg: Annotated[int, typer.Option(help='Number of negative instances to pair with a positive instance.')] = 4,
-    layers: Annotated[str, typer.Option(help='MLP layers')] = '20,10',
-    gmf_factor: Annotated[int, typer.Option(help='GMF factor')] = 8,
+    gmf_user_embed_sizes: Annotated[str, typer.Option(help='GMF user embed size')] = '20,10,10,10',
+    gmf_item_embed_sizes: Annotated[str, typer.Option(help='GMF item embed size')] = '20,10,10,10',
+    mlp_user_embed_sizes: Annotated[str, typer.Option(help='MLP user embed size')] = '20,10,10,10',
+    mlp_item_embed_sizes: Annotated[str, typer.Option(help='MLP item embed size')] = '20,10,10,10',
+    layer_size: Annotated[int, typer.Option(help='MLP layer size')] = 3,
     optimizer: Annotated[str, typer.Option(help='Specify an optimizer')] = 'Adam',
     lr: Annotated[float, typer.Option(help='Learning rate')] = 1e-3,
     top_k: Annotated[int, typer.Option(help='Specify top K for metrics')] = 10,
@@ -72,27 +75,56 @@ def train(
     max_epochs: Annotated[int, typer.Option(help='Max number of epochs to train')] = 100,
     dropout: Annotated[float, typer.Option(help='Dropout value')] = 0.1,
     patience: Annotated[int, typer.Option(help='Early stop patience')] = 5,
+    gradient_clip_algorithm: Annotated[str, typer.Option(help='Gradient clip algorithm')] = 'norm',
+    gradient_clip_val: Annotated[float, typer.Option(help='Gradient clip value')] = 5.0,
     resume: Annotated[str, typer.Option(help='Resume ckpt training')] = 'last',
     fast_dev_run: Annotated[bool, typer.Option(help='Run dev run')] = False,
 ):
     if model_name == 'mlp':
-        layers = [int(i) for i in layers.split(',')]
+        mlp_user_embed_sizes = [int(i) for i in mlp_user_embed_sizes.split(',')]
+        mlp_item_embed_sizes = [int(i) for i in mlp_item_embed_sizes.split(',')]
         data_module = DataModule(batch_size, num_workers, num_neg)
         data_module.setup('fit')
-        model = MLP(data_module.num_users, data_module.num_items, layers, optimizer, lr, top_k, dropout)
+        model = MLP(
+            data_module.users_fields,
+            data_module.items_fields,
+            mlp_user_embed_sizes,
+            mlp_item_embed_sizes,
+            layer_size,
+            optimizer,
+            lr,
+            top_k,
+            dropout
+        )
     elif model_name == 'gmf':
+        gmf_user_embed_sizes = [int(i) for i in gmf_user_embed_sizes.split(',')]
+        gmf_item_embed_sizes = [int(i) for i in gmf_item_embed_sizes.split(',')]
         data_module = DataModule(batch_size, num_workers, num_neg)
         data_module.setup('fit')
-        model = GMF(data_module.num_users, data_module.num_items, gmf_factor, optimizer, lr, top_k)
+        model = GMF(
+            data_module.users_fields,
+            data_module.items_fields,
+            gmf_user_embed_sizes,
+            gmf_item_embed_sizes,
+            optimizer,
+            lr,
+            top_k
+        )
     elif model_name == 'neumf':
-        layers = [int(i) for i in layers.split(',')]
+        gmf_user_embed_sizes = [int(i) for i in gmf_user_embed_sizes.split(',')]
+        gmf_item_embed_sizes = [int(i) for i in gmf_item_embed_sizes.split(',')]
+        mlp_user_embed_sizes = [int(i) for i in mlp_user_embed_sizes.split(',')]
+        mlp_item_embed_sizes = [int(i) for i in mlp_item_embed_sizes.split(',')]
         data_module = DataModule(batch_size, num_workers, num_neg)
         data_module.setup('fit')
         model = NeuMF(
-            data_module.num_users,
-            data_module.num_items,
-            layers,
-            gmf_factor,
+            data_module.users_fields,
+            data_module.items_fields,
+            gmf_user_embed_sizes,
+            gmf_item_embed_sizes,
+            mlp_user_embed_sizes,
+            mlp_item_embed_sizes,
+            layer_size,
             gmf_pretrain,
             mlp_pretrain,
             alpha,
@@ -103,12 +135,12 @@ def train(
         )
     else:
         raise NotImplementedError()
-
+    
     if fast_dev_run:
         accelerator = 'cpu'
     else:
         accelerator = 'auto'
-
+    
     best_model_callbacks = ModelCheckpoint(
         dirpath=os.path.join(config.CHKPTSPATH, model_name),
         filename='best',
@@ -116,7 +148,7 @@ def train(
         mode='max'
     )
     best_model_callbacks.FILE_EXTENSION = '.pth'
-
+    
     trainer = LabTrainer(
         devices='auto',
         accelerator=accelerator,
@@ -125,6 +157,8 @@ def train(
         precision='32-true',
         enable_checkpointing=True,
         max_epochs=max_epochs,
+        gradient_clip_algorithm=gradient_clip_algorithm,
+        gradient_clip_val=gradient_clip_val,
         fast_dev_run=fast_dev_run,
         callbacks=[
             EarlyStopping(monitor='val-HR', mode='max', patience=patience, verbose=True),
@@ -134,11 +168,9 @@ def train(
                 filename='model-{epoch:02d}',
             ),
             best_model_callbacks
-        ],
-        gradient_clip_algorithm='norm',
-        gradient_clip_val=5.0
+        ]
     )
-
+    
     trainer.fit(model, data_module, ckpt_path=resume)
 
 
@@ -155,7 +187,7 @@ def evaluate(
         model = NeuMF.load_from_checkpoint(model_path)
     else:
         raise NotImplementedError()
-
+    
     data_module = DataModule()
     data_module.setup('test')
     trainer = LabTrainer()
@@ -177,15 +209,16 @@ def predict(
         model = NeuMF.load_from_checkpoint(model_path)
     else:
         raise NotImplementedError()
-
+    
     users = pd.read_csv(users_file)
     items = pd.read_csv(items_file)
-
+    assert len(users) == len(items), f'Users and items must have the same length'
+    
     data_module = DataModule(predict_data=(users, items))
     data_module.setup('predict')
     trainer = LabTrainer()
     preds = trainer.predict(model, data_module)
-
+    
     predictions = pd.DataFrame(preds, columns=['prediction'])
     result = pd.concat([users, items, predictions], ignore_index=True)
     result.to_csv(config.PREDSPATH, 'predictions.csv', index=False)
