@@ -46,7 +46,7 @@ class NeuMF(pl.LightningModule):
         for i in range(layer_size - 1):
             linear = nn.Linear(mlp_embed_size // (2 ** i), mlp_embed_size // (2 ** (i + 1)))
             self.layers.append(linear)
-        self.predict_layer = nn.Linear((gmf_embed_size + mlp_embed_size) // (2 ** (layer_size - 1)), 1)
+        self.predict_layer = nn.Linear(gmf_embed_size + mlp_embed_size // (2 ** (layer_size - 1)), 1)
         
         self.gmf_user_embedding = FeaturesEmbedding(users_fields, user_gmf_embed_sizes)
         self.gmf_item_embedding = FeaturesEmbedding(items_fields, item_gmf_embed_sizes)
