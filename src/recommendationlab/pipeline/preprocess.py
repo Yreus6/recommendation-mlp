@@ -63,10 +63,12 @@ class Preprocessor:
 
         user_path = os.path.join(self.data_dir, 'users_dataset.csv')
         item_path = os.path.join(self.data_dir, 'items_dataset.csv')
+        interaction_path = os.path.join(self.data_dir, 'interactions_dataset.csv')
 
         user_df = pd.read_csv(user_path)
         item_df = pd.read_csv(item_path)
-
+        interaction_df = pd.read_csv(interaction_path)
+        
         user_df.fillna({
             'GENRES': 'UNK',
             'INSTRUMENTS': 'UNK',
@@ -107,5 +109,25 @@ class Preprocessor:
         }
         with open(os.path.join(config.SPLITSPATH, 'item_vocab.json'), 'w') as f_item:
             json.dump(item_vocab, f_item)
+        
+        user_df = user_df[user_df['USER_ID'].isin(interaction_df['USER_ID'].unique())]
+        item_df = item_df[item_df['ITEM_ID'].isin(interaction_df['ITEM_ID'].unique())]
+        item_df.drop(['CONTENT_OWNER'], axis=1, inplace=True)
+        
+        user_df.fillna({
+            'GENRES': 'UNK',
+            'INSTRUMENTS': 'UNK',
+            'COUNTRY': 'UNK',
+            'AGE': 0
+        }, inplace=True)
+        item_df.fillna({
+            'GENRES': 'UNK',
+            'GENRE_L2': 'UNK',
+            'GENRE_L3': 'UNK',
+            'CREATION_TIMESTAMP': 0
+        }, inplace=True)
+        
+        user_df.to_csv(os.path.join(config.SPLITSPATH, 'users_dataset.csv'), index=False)
+        item_df.to_csv(os.path.join(config.SPLITSPATH, 'items_dataset.csv'), index=False)
 
         print('Vocabs saved in {}'.format(config.SPLITSPATH))
