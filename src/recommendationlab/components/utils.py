@@ -6,32 +6,36 @@ import torch
 from src.recommendationlab.components.vocab import Vocab
 
 
-def users_normalize(user_df: pd.DataFrame, user_id_vocab: Vocab):
-    user_vocab = Vocab.load_vocab('user_vocab.json')
+def users_normalize(user_df: pd.DataFrame, user_id_vocab: Vocab, user_vocab):
     genres_vocab = user_vocab['genres']
     instruments_vocab = user_vocab['instruments']
     countries_vocab = user_vocab['countries']
     
-    user_df['USER_ID'] = user_df['USER_ID'].apply(lambda x: user_id_vocab.item2id[x])
-    user_df['GENRES'] = user_df['GENRES'].apply(lambda x: genres_vocab[x])
-    user_df['INSTRUMENTS'] = user_df['INSTRUMENTS'].apply(lambda x: instruments_vocab[x])
-    user_df['COUNTRY'] = user_df['COUNTRY'].apply(lambda x: countries_vocab[x])
+    user_df['USER_ID'] = user_df['USER_ID'].apply(lambda x: user_id_vocab.item2id.get(x, 0))
+    user_df['GENRES'] = (
+        user_df['GENRES'].apply(lambda x: genres_vocab[x] if x in genres_vocab else 0))
+    user_df['INSTRUMENTS'] = (
+        user_df['INSTRUMENTS'].apply(lambda x: instruments_vocab[x] if x in instruments_vocab else 0))
+    user_df['COUNTRY'] = (
+        user_df['COUNTRY'].apply(lambda x: countries_vocab[x] if x in countries_vocab else 0))
 
-    return user_df.set_index('USER_ID').T.to_dict('list')
+    return user_df.set_index('USER_ID', drop=False).T.to_dict('list')
 
 
-def items_normalize(item_df: pd.DataFrame, item_id_vocab: Vocab):
-    item_vocab = Vocab.load_vocab('item_vocab.json')
+def items_normalize(item_df: pd.DataFrame, item_id_vocab: Vocab, item_vocab):
     genres_vocab = item_vocab['genres']
     genre_l2_vocab = item_vocab['genre_l2']
     genre_l3_vocab = item_vocab['genre_l3']
     
-    item_df['ITEM_ID'] = item_df['ITEM_ID'].apply(lambda x: item_id_vocab.item2id[x])
-    item_df['GENRES'] = item_df['GENRES'].apply(lambda x: genres_vocab[x])
-    item_df['GENRE_L2'] = item_df['GENRE_L2'].apply(lambda x: genre_l2_vocab[x])
-    item_df['GENRE_L3'] = item_df['GENRE_L3'].apply(lambda x: genre_l3_vocab[x])
+    item_df['ITEM_ID'] = item_df['ITEM_ID'].apply(lambda x: item_id_vocab.item2id.get(x, 0))
+    item_df['GENRES'] = (
+        item_df['GENRES'].apply(lambda x: genres_vocab[x] if x in genres_vocab else 0))
+    item_df['GENRE_L2'] = (
+        item_df['GENRE_L2'].apply(lambda x: genre_l2_vocab[x] if x in genre_l2_vocab else 0))
+    item_df['GENRE_L3'] = (
+        item_df['GENRE_L3'].apply(lambda x: genre_l3_vocab[x] if x in genre_l3_vocab else 0))
 
-    return item_df.set_index('ITEM_ID').T.to_dict('list')
+    return item_df.set_index('ITEM_ID', drop=False).T.to_dict('list')
 
 
 def build_user_item_matrix(interactions: pd.DataFrame, user_id_vocab: Vocab, item_id_vocab: Vocab):
