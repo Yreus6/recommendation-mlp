@@ -64,26 +64,26 @@ class NeuMF(pl.LightningModule):
     def reset_parameters(self):
         if self.gmf_pretrain != '' and self.mlp_pretrain != '':
             for (e1, e2) in zip(self.gmf_user_embedding.embeddings, self.gmf_model.user_embedding.embeddings):
-                e1.weight.copy_(e2.weight)
+                e1.weight.data.copy_(e2.weight)
             for (e1, e2) in zip(self.gmf_item_embedding.embeddings, self.gmf_model.item_embedding.embeddings):
-                e1.weight.copy_(e2.weight)
+                e1.weight.data.copy_(e2.weight)
             for (e1, e2) in zip(self.mlp_user_embedding.embeddings, self.mlp_model.user_embedding.embeddings):
-                e1.weight.copy_(e2.weight)
+                e1.weight.data.copy_(e2.weight)
             for (e1, e2) in zip(self.mlp_item_embedding.embeddings, self.mlp_model.item_embedding.embeddings):
-                e1.weight.copy_(e2.weight)
+                e1.weight.data.copy_(e2.weight)
        
             for (m1, m2) in zip(self.layers, self.mlp_model.layers):
                 if isinstance(m1, nn.Linear) and isinstance(m2, nn.Linear):
-                    m1.weight.copy_(m2.weight)
-                    m1.bias.copy_(m2.bias)
+                    m1.weight.data.copy_(m2.weight)
+                    m1.bias.data.copy_(m2.bias)
             
             predict_weight = torch.cat([
                 self.gmf_model.predict_layer.weight,
                 self.mlp_model.predict_layer.weight
             ], dim=1)
             predict_bias = self.gmf_model.predict_layer.bias + self.mlp_model.predict_layer.bias
-            self.predict_layer.weight.copy_(0.5 * predict_weight)
-            self.predict_layer.bias.copy_(0.5 * predict_bias)
+            self.predict_layer.weight.data.copy_(0.5 * predict_weight)
+            self.predict_layer.bias.data.copy_(0.5 * predict_bias)
         else:
             for embedding in self.gmf_user_embedding.embeddings:
                 nn.init.normal_(embedding.weight, std=0.01)
