@@ -80,6 +80,7 @@ def train(
     gradient_clip_algorithm: Annotated[str, typer.Option(help='Gradient clip algorithm')] = 'norm',
     gradient_clip_val: Annotated[float, typer.Option(help='Gradient clip value')] = 5.0,
     resume: Annotated[str, typer.Option(help='Resume ckpt training')] = 'last',
+    devices: Annotated[str, typer.Option(help='Devices to use')] = 'auto',
     fast_dev_run: Annotated[bool, typer.Option(help='Run dev run')] = False,
 ):
     if model_name == 'mlp':
@@ -152,7 +153,7 @@ def train(
     best_model_callbacks.FILE_EXTENSION = '.pth'
     
     trainer = LabTrainer(
-        devices='auto',
+        devices=devices,
         accelerator=accelerator,
         strategy='auto',
         num_nodes=1,
